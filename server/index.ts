@@ -2,31 +2,37 @@ import express from 'express'
 import http from 'http'
 import { Server } from 'socket.io'
 import cors from 'cors'
+import {
+  ClientToServerEvents,
+  JoinRoomPayload,
+  RoomState,
+  ServerToClientEvents,
+} from '@shared/types/events'
 
 const app = express()
 app.use(cors())
 const server = http.createServer(app)
-const io = new Server(server, { cors: { origin: '*' } })
+const io = new Server<ClientToServerEvents, ServerToClientEvents>(server, { cors: { origin: '*' } })
 
-// Minimalny magazyn w pamięci
-const rooms = new Map() // roomId -> { players: Map<socketId,{name}>, max:100, category, deck:[], used:Set<number>, currentIndex:null, duel:null }
+const rooms = new Map<JoinRoomPayload['roomId'], RoomState>()
 
-function ensureRoom(roomId) {
+function ensureRoom(roomId: JoinRoomPayload['roomId']) {
   if (!rooms.has(roomId)) {
     rooms.set(roomId, {
       players: new Map(),
       max: 100,
       category: null,
-      deck: [], // [{img:'/img/...', aliases:['...','...']}]
+      deck: [],
       used: new Set(),
       currentIndex: null,
-      duel: null, // { aId, bId, turnId, score: {aId:number,bId:number} }
+      current: null,
+      duel: null,
     })
   }
-  return rooms.get(roomId)
+  return rooms.get(roomId)!
 }
 
-function pickNextIndex(room) {
+function pickNextIndex(room: RoomState) {
   if (!room.deck.length) return null
   if (room.used.size >= room.deck.length) room.used.clear()
   let idx
@@ -46,7 +52,7 @@ io.on('connection', (socket) => {
       return
     }
     socket.join(roomId)
-    room.players.set(socket.id, { name: name?.trim() || 'Gracz' })
+    room.players.set(socket.id, { id: socket.id, name: name?.trim() || 'Gracz' })
     io.to(roomId).emit('roomState', {
       players: Array.from(room.players, ([id, p]) => ({ id, name: p.name })),
       category: room.category,
@@ -68,6 +74,9 @@ io.on('connection', (socket) => {
     room.deck = Array.isArray(deck) ? deck : []
     room.used.clear()
     pickNextIndex(room)
+    if (!room.currentIndex) {
+      return
+    }
     io.to(roomId).emit('categorySet', { category: room.category })
     io.to(roomId).emit('currentImage', { current: room.deck[room.currentIndex] || null })
   })
@@ -88,6 +97,9 @@ io.on('connection', (socket) => {
     const room = ensureRoom(roomId)
     if (!room.duel) return
     pickNextIndex(room)
+    if (!room.currentIndex) {
+      return
+    }
     io.to(roomId).emit('currentImage', { current: room.deck[room.currentIndex] || null })
   })
 
@@ -128,7 +140,7 @@ io.on('connection', (socket) => {
   socket.on('disconnecting', () => {
     for (const roomId of socket.rooms) {
       if (rooms.has(roomId)) {
-        const room = rooms.get(roomId)
+        const room = rooms.get(roomId)!
         room.players.delete(socket.id)
         if (room.duel && (room.duel.aId === socket.id || room.duel.bId === socket.id)) {
           room.duel = null

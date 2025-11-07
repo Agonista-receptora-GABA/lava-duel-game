@@ -1,24 +1,20 @@
 import { defineStore } from 'pinia'
+import type { Card, JoinRoomPayload, RoomStatePayload } from '@shared/types/events'
 import { socket } from '../socket'
 
-type Player = { id: string; name: string }
-type Card = { img: string; aliases: string[] }
+type GameState = JoinRoomPayload & RoomStatePayload & { transcript: string }
 
 export const useGameStore = defineStore('game', {
-  state: () => ({
-    roomId: '' as string,
-    name: '' as string,
-    players: [] as Player[],
-    category: '' as string,
-    current: null as Card | null,
-    duel: null as {
-      aId: string
-      bId: string
-      turnId: string
-      score: Record<string, number>
-    } | null,
-    transcript: '' as string,
-  }),
+  state: () =>
+    ({
+      roomId: '',
+      name: '',
+      players: [],
+      category: '',
+      current: null,
+      duel: null,
+      transcript: '',
+    }) as GameState,
   actions: {
     connect(roomId: string, name: string) {
       this.roomId = roomId
