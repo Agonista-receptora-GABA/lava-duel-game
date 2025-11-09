@@ -34,15 +34,10 @@ export function useSpeechRecognition(opts: UseSpeechRecognitionOptions = {}) {
     recognition.maxAlternatives = 1
 
     recognition.onresult = function (event: SpeechRecognitionEvent) {
-      // Pobierz ostatni wynik rozpoznania
       const lastResult = event.results[event.results.length - 1]
       if (lastResult?.isFinal) {
         const text = lastResult[0]?.transcript.trim().toLowerCase() || ''
-        // Wyodrębnij pojedyncze słowa z tekstu i ręcznie wywołaj onResult dla każdego słowa
-        const words = text.split(/\s+/)
-        words.forEach((word) => {
-          if (word) opts.onResult?.(word)
-        })
+        opts.onResult?.(text)
       }
     }
 
