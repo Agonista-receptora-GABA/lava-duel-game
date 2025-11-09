@@ -43,8 +43,8 @@ onMounted(() => game.bindSocketEvents())
         <button @click="game.startDuel(aId, bId)" :disabled="!aId || !bId">Start 1v1</button>
       </div>
 
-      <div v-if="game.current">
-        <img :src="game.current.img" alt="obraz" style="max-width: 320px" />
+      <div v-if="game.duel && game.current">
+        <img :src="game.current.img" alt="" style="max-width: 320px" />
         <p>Transkrypcja: {{ game.transcript }}</p>
         <button @click="game.pass()">Pas</button>
         <button @click="listening ? stopListening() : startListening()" :disabled="!supported">
