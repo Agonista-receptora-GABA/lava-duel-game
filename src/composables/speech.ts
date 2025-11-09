@@ -4,7 +4,7 @@ type SpeechRecognitionConstructor = new () => SpeechRecognition
 
 type UseSpeechRecognitionOptions = {
   lang?: string
-  onResult?: (text: string) => void
+  onResult?: (word: string) => void
 }
 
 export function useSpeechRecognition(opts: UseSpeechRecognitionOptions = {}) {
@@ -29,42 +29,51 @@ export function useSpeechRecognition(opts: UseSpeechRecognitionOptions = {}) {
     if (!recognition) return
 
     recognition.lang = opts.lang || 'pl-PL'
-    recognition.continuous = false
-    recognition.interimResults = true
-    recognition.maxAlternatives = 3
+    recognition.continuous = true // ciągły nasłuch
+    recognition.interimResults = false // tylko finalne wyniki
+    recognition.maxAlternatives = 1
 
     recognition.onresult = function (event: SpeechRecognitionEvent) {
-      let text = ''
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const res = event.results[i]
-        if (res && res[0]) {
-          const best = res[0].transcript || ''
-          text = best
-        }
+      // Pobierz ostatni wynik rozpoznania
+      const lastResult = event.results[event.results.length - 1]
+      if (lastResult?.isFinal) {
+        const text = lastResult[0]?.transcript.trim().toLowerCase() || ''
+        // Wyodrębnij pojedyncze słowa z tekstu i ręcznie wywołaj onResult dla każdego słowa
+        const words = text.split(/\s+/)
+        words.forEach((word) => {
+          if (word) opts.onResult?.(word)
+        })
       }
-      const cleaned = text.trim().toLowerCase()
-      opts.onResult?.(cleaned)
+    }
+
+    recognition.onstart = () => {
+      listening.value = true
     }
 
     recognition.onend = () => {
-      listening.value = false
+      // Jeśli chcesz, aby nasłuch był ciągły, automatycznie restartuj
+      if (listening.value) {
+        recognition?.start()
+      }
     }
   }
 
   function startListening() {
     if (!supported) return
     if (!recognition) init()
+    listening.value = true
     try {
       recognition?.start()
-      listening.value = true
     } catch {
-      // obsługa start() gdy już aktywny: ignoruj
+      // ignoruj jeśli start() jest wywołany gdy już działa
     }
   }
 
   function stopListening() {
-    if (recognition && listening.value) recognition.stop()
-    listening.value = false
+    if (recognition && listening.value) {
+      listening.value = false
+      recognition.stop()
+    }
   }
 
   return { listening, supported, startListening, stopListening }
