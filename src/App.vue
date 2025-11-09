@@ -1,17 +1,46 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useGameStore } from './stores/game'
 import { useSpeechRecognition } from './composables/speech'
 
 const game = useGameStore()
 const roomId = ref('pokoj-1')
 const name = ref('Gracz')
-const { startListening, stopListening, supported, listening } = useSpeechRecognition({
+const { startListening, stopListening, supported } = useSpeechRecognition({
   lang: 'pl-PL',
   onResult: (text: string) => game.answer(text),
 })
 
-onMounted(() => game.bindSocketEvents())
+const currentPlayerId = computed(
+  () => game.players.find(({ name: playerName }) => playerName === name.value)?.id,
+)
+
+onMounted(() =>
+  game.bindSocketEvents({
+    onDuelStarted: (d) => {
+      if (!supported) {
+        alert(
+          'Rozpoznawanie mowy jest nieobsługiwane w Twojej przeglądarce, a bez tego nie można grać. Użyj nowszej przeglądarki',
+        )
+        return
+      }
+      if (d.turnId === currentPlayerId.value) {
+        startListening()
+      }
+    },
+    onCorrect: (c) => {
+      if (c.by === currentPlayerId.value) {
+        stopListening()
+      }
+      if (c.turnId === currentPlayerId.value) {
+        startListening()
+      }
+    },
+    onDuelEnded: () => {
+      stopListening()
+    },
+  }),
+)
 </script>
 
 <template>
@@ -47,9 +76,6 @@ onMounted(() => game.bindSocketEvents())
         <img :src="game.current.img" alt="" style="max-width: 320px" />
         <p>Transkrypcja: {{ game.transcript }}</p>
         <button @click="game.pass()">Pas</button>
-        <button @click="listening ? stopListening() : startListening()" :disabled="!supported">
-          {{ listening ? 'Stop' : 'Mów' }}
-        </button>
       </div>
     </section>
   </main>
