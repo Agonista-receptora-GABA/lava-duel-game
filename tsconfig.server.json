@@ -1,13 +1,7 @@
 {
+  "extends": "@tsconfig/node22/tsconfig.json",
   "compilerOptions": {
-    "target": "es2020",
-    "module": "commonjs",
-    "strict": true,
-    "esModuleInterop": true,
-    "outDir": "dist/server",
-    "skipLibCheck": true,
-    "moduleResolution": "node",
-    "types": ["node"],
+    "outDir": "dist",
     "paths": {
       "@shared/*": ["./shared/*"]
     }

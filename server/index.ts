@@ -7,7 +7,7 @@ import type {
   JoinRoomPayload,
   RoomState,
   ServerToClientEvents,
-} from '@shared/types/events'
+} from '@shared/types/events.ts'
 
 const app = express()
 app.use(cors())
