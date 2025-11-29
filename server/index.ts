@@ -8,11 +8,28 @@ import type {
   RoomState,
   ServerToClientEvents,
 } from '@shared/types/events.ts'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+const PORT = process.env.PORT || process.env.SERVER_PORT || 3000
+const HOST = process.env.HOST || '0.0.0.0'
+
+console.log(`Starting Lava Duel Game on ${HOST}:${PORT}`)
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 const app = express()
 app.use(cors())
 const server = http.createServer(app)
-const io = new Server<ClientToServerEvents, ServerToClientEvents>(server, { cors: { origin: '*' } })
+const io = new Server<ClientToServerEvents, ServerToClientEvents>(server, {
+  cors: {
+    origin:
+      process.env.NODE_ENV === 'production'
+        ? process.env.CLIENT_ORIGINS?.split(',') || 'https://lava-duel-game.com'
+        : true,
+  },
+})
 
 const rooms = new Map<JoinRoomPayload['roomId'], RoomState>()
 
@@ -157,4 +174,11 @@ io.on('connection', (socket) => {
   })
 })
 
-server.listen(3001, () => console.log('Socket.IO listening on :3001'))
+app.use(express.static(path.join(__dirname, '../')))
+
+// Health check (K8s)
+app.get('/health', (_req, res) => res.status(200).json({ status: 'OK' }))
+
+app.get('/{*splat}', (_req, res) => res.sendFile(path.join(__dirname, '../index.html')))
+
+server.listen(PORT, () => console.log(`Lava Duel Game on ${HOST}:${PORT}`))
