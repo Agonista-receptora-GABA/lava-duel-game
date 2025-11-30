@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lava-duel
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: lava-duel
+  template:
+    metadata:
+      labels:
+        app: lava-duel
+    spec:
+      containers:
+      - name: lava-duel
+        image: europe-west4-docker.pkg.dev/however-you-please/lava-duel/lava-duel:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3000
+        env:
+        - name: PORT
+          value: "3000"
+        - name: NODE_ENV
+          value: "production"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 15
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
