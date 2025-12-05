@@ -2,30 +2,36 @@ name: Deploy Lava Duel to GKE
 on:
   push:
     branches: [master]
-    
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    
+
     - id: auth
       uses: google-github-actions/auth@v2
       with:
         credentials_json: ${{ secrets.GCP_SA_KEY }}
-    
+
     - uses: google-github-actions/setup-gcloud@v2
-    
-    # Build + Push Docker
-    - name: Build and Push
+
+    - name: Configure Docker for Artifact Registry
       run: |
-        IMAGE=europe-west4-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/lava-duel/lava-duel:latest
+        gcloud auth configure-docker europe-west4-docker.pkg.dev
+        echo "Docker auth configured for $(gcloud auth list --filter=status:ACTIVE --format='value(account)')"
+
+    - name: Build & Push Docker Image
+      run: |
+        IMAGE="europe-west4-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/lava-duel/lava-duel:latest"
+        echo "Building $IMAGE"
         docker build -t $IMAGE .
         docker push $IMAGE
-    
-    # Deploy to GKE
-    - name: Deploy
+
+    - name: Deploy to GKE
       run: |
-        gcloud container clusters get-credentials lava-duel-cluster --zone=europe-west4-a --project=${{ secrets.GCP_PROJECT_ID }}
-        kubectl set image deployment/lava-duel-service lava-duel=$IMAGE
-        kubectl rollout status deployment/lava-duel-service
+        gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER_NAME }} \
+          --zone=${{ secrets.GKE_ZONE }} \
+          --project=${{ secrets.GCP_PROJECT_ID }}
+        kubectl rollout restart deployment/lava-duel
+        kubectl rollout status deployment/lava-duel --timeout=300s
