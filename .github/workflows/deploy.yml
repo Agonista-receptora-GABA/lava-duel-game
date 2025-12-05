@@ -30,9 +30,9 @@ jobs:
 
     - uses: google-github-actions/get-gke-credentials@v2
       with:
-        clusterName: ${{ secrets.GKE_CLUSTER_NAME }}
+        cluster_name: ${{ secrets.GKE_CLUSTER_NAME }}
         location: ${{ secrets.GKE_ZONE }}
-        projectId: ${{ secrets.GCP_PROJECT_ID }}
+        project_id: ${{ secrets.GCP_PROJECT_ID }}
 
     - name: Deploy to GKE
       run: |
