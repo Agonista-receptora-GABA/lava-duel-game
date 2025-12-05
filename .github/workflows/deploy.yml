@@ -36,5 +36,5 @@ jobs:
 
     - name: Deploy to GKE
       run: |
-        kubectl rollout restart deployment/lava-duel
+        kubectl apply -f k8s/
         kubectl rollout status deployment/lava-duel --timeout=300s
