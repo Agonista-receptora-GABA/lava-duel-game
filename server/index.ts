@@ -26,7 +26,7 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents>(server, {
   cors: {
     origin:
       process.env.NODE_ENV === 'production'
-        ? process.env.CLIENT_ORIGINS?.split(',') || 'https://lava-duel-game.com'
+        ? process.env.CLIENT_ORIGINS?.split(',') || '*'
         : true,
   },
 })
