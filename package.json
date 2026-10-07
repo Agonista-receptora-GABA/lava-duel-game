@@ -19,8 +19,10 @@
     "format": "prettier --write src/"
   },
   "dependencies": {
+    "@socket.io/redis-adapter": "^8.3.0",
     "cors": "^2.8.5",
     "express": "^5.1.0",
+    "ioredis": "^5.8.2",
     "pinia": "^3.0.3",
     "socket.io": "^4.8.1",
     "socket.io-client": "^4.8.1",

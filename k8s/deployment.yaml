@@ -13,25 +13,27 @@ spec:
         app: lava-duel
     spec:
       containers:
-      - name: lava-duel
-        image: europe-west4-docker.pkg.dev/however-you-please/lava-duel/lava-duel:latest
-        imagePullPolicy: Always
-        ports:
-        - containerPort: 3000
-        env:
-        - name: PORT
-          value: "3000"
-        - name: NODE_ENV
-          value: "production"
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 3000
-          initialDelaySeconds: 15
-        resources:
-          requests:
-            cpu: "50m"
-            memory: "64Mi"
-          limits:
-            cpu: "250m"
-            memory: "256Mi"
+        - name: lava-duel
+          image: europe-west4-docker.pkg.dev/however-you-please/lava-duel/lava-duel:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+          env:
+            - name: PORT
+              value: '3000'
+            - name: NODE_ENV
+              value: 'production'
+            - name: REDIS_URL
+              value: 'redis://lava-duel-redis:6379'
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 15
+          resources:
+            requests:
+              cpu: '50m'
+              memory: '64Mi'
+            limits:
+              cpu: '250m'
+              memory: '256Mi'
