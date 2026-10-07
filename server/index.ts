@@ -25,9 +25,7 @@ const server = http.createServer(app)
 const io = new Server<ClientToServerEvents, ServerToClientEvents>(server, {
   cors: {
     origin:
-      process.env.NODE_ENV === 'production'
-        ? process.env.CLIENT_ORIGINS?.split(',') || '*'
-        : true,
+      process.env.NODE_ENV === 'production' ? process.env.CLIENT_ORIGINS?.split(',') || '*' : true,
   },
 })
 
@@ -91,7 +89,7 @@ io.on('connection', (socket) => {
     room.deck = Array.isArray(deck) ? deck : []
     room.used.clear()
     pickNextIndex(room)
-    if (!room.currentIndex) {
+    if (room.currentIndex === null) {
       return
     }
     io.to(roomId).emit('categorySet', { category: room.category })
@@ -114,7 +112,7 @@ io.on('connection', (socket) => {
     const room = ensureRoom(roomId)
     if (!room.duel) return
     pickNextIndex(room)
-    if (!room.currentIndex) {
+    if (room.currentIndex === null) {
       return
     }
     io.to(roomId).emit('currentImage', { current: room.deck[room.currentIndex] || null })

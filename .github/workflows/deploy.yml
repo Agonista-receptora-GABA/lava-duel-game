@@ -1,40 +1,43 @@
 name: Deploy Lava Duel to GKE
-on:
-  push:
-    branches: [master]
+
+# Auto-run disabled, because the deployment is planned to be migrated to Oracle
+# Always-Free - it's a hobby project, so not gonna pay.
+# on:
+#   push:
+#     branches: [master]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - id: auth
-      uses: google-github-actions/auth@v2
-      with:
-        credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-    - uses: google-github-actions/setup-gcloud@v2
+      - uses: google-github-actions/setup-gcloud@v2
 
-    - name: Configure Docker for Artifact Registry
-      run: |
-        gcloud auth configure-docker europe-west4-docker.pkg.dev
-        echo "Docker auth configured for $(gcloud auth list --filter=status:ACTIVE --format='value(account)')"
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker europe-west4-docker.pkg.dev
+          echo "Docker auth configured for $(gcloud auth list --filter=status:ACTIVE --format='value(account)')"
 
-    - name: Build & Push Docker Image
-      run: |
-        IMAGE="europe-west4-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/lava-duel/lava-duel:latest"
-        echo "Building $IMAGE"
-        docker build -t $IMAGE .
-        docker push $IMAGE
+      - name: Build & Push Docker Image
+        run: |
+          IMAGE="europe-west4-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/lava-duel/lava-duel:latest"
+          echo "Building $IMAGE"
+          docker build -t $IMAGE .
+          docker push $IMAGE
 
-    - uses: google-github-actions/get-gke-credentials@v2
-      with:
-        cluster_name: ${{ secrets.GKE_CLUSTER_NAME }}
-        location: ${{ secrets.GKE_ZONE }}
-        project_id: ${{ secrets.GCP_PROJECT_ID }}
+      - uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ secrets.GKE_CLUSTER_NAME }}
+          location: ${{ secrets.GKE_ZONE }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
 
-    - name: Deploy to GKE
-      run: |
-        kubectl apply -f k8s/
-        kubectl rollout status deployment/lava-duel --timeout=300s
+      - name: Deploy to GKE
+        run: |
+          kubectl apply -f k8s/
+          kubectl rollout status deployment/lava-duel --timeout=300s
