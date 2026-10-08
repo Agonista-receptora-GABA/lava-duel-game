@@ -5,7 +5,11 @@
   "type": "module",
   "scripts": {
     "dev:fe": "vite",
+    "dev:fe1": "VITE_SOCKET_URL=http://localhost:3000 vite --port 5173",
+    "dev:fe2": "VITE_SOCKET_URL=http://localhost:3001 vite --port 5174",
     "dev:server": "tsx watch --tsconfig tsconfig.server.json server/index.ts",
+    "dev:server1": "PORT=3000 REDIS_URL=redis://127.0.0.1:6379 npm run dev:server",
+    "dev:server2": "PORT=3001 REDIS_URL=redis://127.0.0.1:6379 npm run dev:server",
     "build:fe": "run-p type-check \"build-only {@}\" --",
     "build:server": "tsc --project tsconfig.server.json",
     "build": "run-s build:fe build:server",
