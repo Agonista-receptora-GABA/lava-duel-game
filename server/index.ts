@@ -1,7 +1,7 @@
 import express from 'express'
 import http from 'http'
 import { createAdapter } from '@socket.io/redis-adapter'
-import { Server } from 'socket.io'
+import { Server, type Socket } from 'socket.io'
 import cors from 'cors'
 import { Redis } from 'ioredis'
 import type { ClientToServerEvents, RoomState, ServerToClientEvents } from '@shared/types/events.ts'
@@ -97,201 +97,256 @@ async function emitRoomState(roomId: string, room: RoomState) {
   })
 }
 
+// Handlers are async (Redis), so:
+// 1) events from a single socket run sequentially - otherwise e.g. setCategory
+//    could overtake joinRoom (each event waits for its own lock),
+// 2) errors are caught here - an unhandled promise rejection kills the Node process,
+//    so a transient Redis problem would restart the whole pod.
+const socketQueues = new WeakMap<Socket, Promise<void>>()
+
+function run(socket: Socket, task: () => Promise<unknown>) {
+  const next = (socketQueues.get(socket) ?? Promise.resolve())
+    .then(task)
+    .then(() => undefined)
+    .catch((error) => {
+      console.error('[socket] handler failed', error)
+      socket.emit('errorMsg', 'Błąd serwera')
+    })
+
+  socketQueues.set(socket, next)
+}
+
+/**
+ * Removes players whose socket no longer exists (e.g. the pod died without 'disconnecting').
+ * `liveIds` = sockets actually connected to the room, across all pods.
+ */
+function pruneDisconnectedPlayers(room: RoomState, liveIds: Set<string>) {
+  for (const id of [...room.players.keys()]) {
+    if (liveIds.has(id)) continue
+
+    room.players.delete(id)
+
+    if (room.duel && (room.duel.aId === id || room.duel.bId === id)) {
+      room.duel = null
+    }
+  }
+}
+
 io.on('connection', (socket) => {
-  socket.on('joinRoom', async ({ roomId, name }) => {
-    await gameStore.withLock(roomId, async () => {
-      const room = (await gameStore.get(roomId)) || createRoom()
+  socket.on('joinRoom', ({ roomId, name }) =>
+    run(socket, async () => {
+      // Join the Socket.IO room first so this socket is visible in fetchSockets()
+      await socket.join(roomId)
 
-      if (room.players.size >= room.max) {
-        socket.emit('errorMsg', 'Pokój pełny (100)')
-        return
-      }
+      const accepted = await gameStore.withLock(roomId, async () => {
+        const room = (await gameStore.get(roomId)) || createRoom()
 
-      socket.join(roomId)
+        // Clean up "ghost" players left by dead pods. The list of live sockets is fetched
+        // under the lock - every player stored in the store joined the room earlier,
+        // so we won't prune someone who has just joined through another pod.
+        const liveIds = new Set((await io.in(roomId).fetchSockets()).map((s) => s.id))
+        pruneDisconnectedPlayers(room, liveIds)
 
-      room.players.set(socket.id, {
-        id: socket.id,
-        name: name?.trim() || 'Gracz',
-      })
-
-      await gameStore.set(roomId, room)
-      await emitRoomState(roomId, room)
-    })
-  })
-
-  socket.on('setCategory', async ({ roomId, category, deck }) => {
-    await gameStore.withLock(roomId, async () => {
-      const room = (await gameStore.get(roomId)) || createRoom()
-
-      room.category = category
-      room.deck = Array.isArray(deck) ? deck : []
-      room.used.clear()
-
-      pickNextIndex(room)
-
-      await gameStore.set(roomId, room)
-
-      if (room.currentIndex === null) {
-        return
-      }
-
-      io.to(roomId).emit('categorySet', {
-        category: room.category,
-      })
-
-      io.to(roomId).emit('currentImage', {
-        current: room.current,
-      })
-    })
-  })
-
-  socket.on('startDuel', async ({ roomId, aId, bId }) => {
-    await gameStore.withLock(roomId, async () => {
-      const room = await gameStore.get(roomId)
-
-      if (!room || !room.players.has(aId) || !room.players.has(bId)) {
-        return
-      }
-
-      room.duel = {
-        aId,
-        bId,
-        turnId: aId,
-        score: {
-          [aId]: 0,
-          [bId]: 0,
-        },
-      }
-
-      await gameStore.set(roomId, room)
-
-      io.to(roomId).emit('duelStarted', {
-        aId,
-        bId,
-        turnId: room.duel.turnId,
-        score: room.duel.score,
-      })
-    })
-  })
-
-  socket.on('pass', async ({ roomId }) => {
-    await gameStore.withLock(roomId, async () => {
-      const room = await gameStore.get(roomId)
-
-      if (!room?.duel) {
-        return
-      }
-
-      pickNextIndex(room)
-
-      await gameStore.set(roomId, room)
-
-      if (room.currentIndex === null) {
-        return
-      }
-
-      io.to(roomId).emit('currentImage', {
-        current: room.current,
-      })
-    })
-  })
-
-  socket.on('answer', async ({ roomId, text }) => {
-    await gameStore.withLock(roomId, async () => {
-      const room = await gameStore.get(roomId)
-      const duel = room?.duel
-
-      if (!room || !duel || room.currentIndex === null) {
-        return
-      }
-
-      const normalized = String(text || '')
-        .trim()
-        .toLowerCase()
-
-      const current = room.deck[room.currentIndex]
-
-      const isPass = normalized === 'pas'
-
-      const isCorrect = current?.aliases?.some((alias) => alias.toLowerCase() === normalized)
-
-      if (isPass) {
-        pickNextIndex(room)
-
-        await gameStore.set(roomId, room)
-
-        io.to(roomId).emit('passed', {
-          by: socket.id,
-        })
-
-        io.to(roomId).emit('currentImage', {
-          current: room.current,
-        })
-
-        return
-      }
-
-      if (socket.id !== duel.turnId) {
-        io.to(socket.id).emit('notYourTurn', true)
-        return
-      }
-
-      if (isCorrect) {
-        duel.score[socket.id] = (duel.score[socket.id] || 0) + 1
-
-        duel.turnId = socket.id === duel.aId ? duel.bId : duel.aId
-
-        pickNextIndex(room)
-
-        await gameStore.set(roomId, room)
-
-        io.to(roomId).emit('correct', {
-          by: socket.id,
-          score: duel.score,
-          turnId: duel.turnId,
-        })
-
-        io.to(roomId).emit('currentImage', {
-          current: room.current,
-        })
-      } else {
-        io.to(roomId).emit('wrong', {
-          by: socket.id,
-          guess: normalized,
-        })
-      }
-    })
-  })
-
-  socket.on('disconnecting', async () => {
-    for (const roomId of socket.rooms) {
-      if (roomId === socket.id) {
-        continue
-      }
-
-      await gameStore.withLock(roomId, async () => {
-        const room = await gameStore.get(roomId)
-
-        if (!room) {
-          return
+        if (room.players.size >= room.max) {
+          socket.emit('errorMsg', 'Pokój pełny (100)')
+          return false
         }
 
-        room.players.delete(socket.id)
-
-        if (room.duel && (room.duel.aId === socket.id || room.duel.bId === socket.id)) {
-          room.duel = null
-
-          io.to(roomId).emit('duelEnded', 'Gracz rozłączył się')
-        }
-
-        if (room.players.size === 0) {
-          await gameStore.delete(roomId)
-          return
-        }
+        room.players.set(socket.id, {
+          id: socket.id,
+          name: name?.trim() || 'Gracz',
+        })
 
         await gameStore.set(roomId, room)
         await emitRoomState(roomId, room)
+
+        return true
       })
+
+      if (!accepted) await socket.leave(roomId)
+    }),
+  )
+
+  socket.on('setCategory', ({ roomId, category, deck }) =>
+    run(socket, () =>
+      gameStore.withLock(roomId, async () => {
+        const room = (await gameStore.get(roomId)) || createRoom()
+
+        room.category = category
+        room.deck = Array.isArray(deck) ? deck : []
+        room.used.clear()
+
+        pickNextIndex(room)
+
+        await gameStore.set(roomId, room)
+
+        if (room.currentIndex === null) {
+          return
+        }
+
+        io.to(roomId).emit('categorySet', {
+          category: room.category,
+        })
+
+        io.to(roomId).emit('currentImage', {
+          current: room.current,
+        })
+      }),
+    ),
+  )
+
+  socket.on('startDuel', ({ roomId, aId, bId }) =>
+    run(socket, () =>
+      gameStore.withLock(roomId, async () => {
+        const room = await gameStore.get(roomId)
+
+        if (!room || !room.players.has(aId) || !room.players.has(bId)) {
+          return
+        }
+
+        room.duel = {
+          aId,
+          bId,
+          turnId: aId,
+          score: {
+            [aId]: 0,
+            [bId]: 0,
+          },
+        }
+
+        await gameStore.set(roomId, room)
+
+        io.to(roomId).emit('duelStarted', {
+          aId,
+          bId,
+          turnId: room.duel.turnId,
+          score: room.duel.score,
+        })
+      }),
+    ),
+  )
+
+  socket.on('pass', ({ roomId }) =>
+    run(socket, () =>
+      gameStore.withLock(roomId, async () => {
+        const room = await gameStore.get(roomId)
+
+        if (!room?.duel) {
+          return
+        }
+
+        pickNextIndex(room)
+
+        await gameStore.set(roomId, room)
+
+        if (room.currentIndex === null) {
+          return
+        }
+
+        io.to(roomId).emit('currentImage', {
+          current: room.current,
+        })
+      }),
+    ),
+  )
+
+  socket.on('answer', ({ roomId, text }) =>
+    run(socket, () =>
+      gameStore.withLock(roomId, async () => {
+        const room = await gameStore.get(roomId)
+        const duel = room?.duel
+
+        if (!room || !duel || room.currentIndex === null) {
+          return
+        }
+
+        const normalized = String(text || '')
+          .trim()
+          .toLowerCase()
+
+        const current = room.deck[room.currentIndex]
+
+        const isPass = normalized === 'pas'
+
+        const isCorrect = current?.aliases?.some((alias) => alias.toLowerCase() === normalized)
+
+        if (isPass) {
+          pickNextIndex(room)
+
+          await gameStore.set(roomId, room)
+
+          io.to(roomId).emit('passed', {
+            by: socket.id,
+          })
+
+          io.to(roomId).emit('currentImage', {
+            current: room.current,
+          })
+
+          return
+        }
+
+        if (socket.id !== duel.turnId) {
+          io.to(socket.id).emit('notYourTurn', true)
+          return
+        }
+
+        if (isCorrect) {
+          duel.score[socket.id] = (duel.score[socket.id] || 0) + 1
+
+          duel.turnId = socket.id === duel.aId ? duel.bId : duel.aId
+
+          pickNextIndex(room)
+
+          await gameStore.set(roomId, room)
+
+          io.to(roomId).emit('correct', {
+            by: socket.id,
+            score: duel.score,
+            turnId: duel.turnId,
+          })
+
+          io.to(roomId).emit('currentImage', {
+            current: room.current,
+          })
+        } else {
+          io.to(roomId).emit('wrong', {
+            by: socket.id,
+            guess: normalized,
+          })
+        }
+      }),
+    ),
+  )
+
+  socket.on('disconnecting', () => {
+    // socket.rooms must be copied synchronously - Socket.IO clears that set right after the event
+    // and we await inside the loop. Skip the "private" room named after socket.id.
+    const roomIds = [...socket.rooms].filter((id) => id !== socket.id)
+
+    for (const roomId of roomIds) {
+      run(socket, () =>
+        gameStore.withLock(roomId, async () => {
+          const room = await gameStore.get(roomId)
+
+          if (!room) {
+            return
+          }
+
+          room.players.delete(socket.id)
+
+          if (room.duel && (room.duel.aId === socket.id || room.duel.bId === socket.id)) {
+            room.duel = null
+
+            io.to(roomId).emit('duelEnded', 'Gracz rozłączył się')
+          }
+
+          // An empty room is kept (category/deck survive a page refresh) but expires:
+          // Redis - short TTL, memory - timer in MemoryGameStore.
+          await gameStore.set(roomId, room)
+          await emitRoomState(roomId, room)
+        }),
+      )
     }
   })
 })

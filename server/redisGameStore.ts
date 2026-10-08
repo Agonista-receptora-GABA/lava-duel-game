@@ -2,7 +2,9 @@ import { Redis } from 'ioredis'
 import type { RoomState } from '@shared/types/events.ts'
 import type { GameStore } from './gameStore.ts'
 
-const ROOM_TTL_SECONDS = 24 * 60 * 60
+// a room with players lives 6 h after the last action, an empty one (e.g. page refresh) - 10 min
+const ROOM_TTL_SECONDS = 6 * 60 * 60
+const EMPTY_ROOM_TTL_SECONDS = 10 * 60
 const LOCK_TTL_MS = 10_000
 const LOCK_RETRIES = 100
 const LOCK_RETRY_DELAY_MS = 50
@@ -59,7 +61,12 @@ export class RedisGameStore implements GameStore {
   }
 
   async set(roomId: string, room: RoomState): Promise<void> {
-    await this.redis.set(this.roomKey(roomId), serializeRoom(room), 'EX', ROOM_TTL_SECONDS)
+    await this.redis.set(
+      this.roomKey(roomId),
+      serializeRoom(room),
+      'EX',
+      room.players.size > 0 ? ROOM_TTL_SECONDS : EMPTY_ROOM_TTL_SECONDS,
+    )
   }
 
   async delete(roomId: string): Promise<void> {
