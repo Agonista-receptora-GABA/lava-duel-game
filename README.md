@@ -42,3 +42,26 @@ Then go to the Redis CLI and check that there's just only one common key for the
 room, using `KEYS *`.
 For example, if you used `pokoj-1` as the common room name, it'll be:
 `1) "lava-duel:room:pokoj-1"`.
+
+## Tests
+
+```sh
+npm test                 # everything (unit + server), once
+npm run test:unit        # frontend unit tests (watch mode)
+npm run test:server      # backend tests (watch mode)
+npm run type-check:tests # type-check tests/ against the server code
+```
+
+The backend tests live in `tests/server` and are **black-box**: they start the real server as
+child processes (`node --import tsx server/index.ts`, several of them to simulate pods) and talk to
+it only through Socket.IO events and `GET /health`. Because of that they don't depend on how
+`server/index.ts` is organised - the only coupling is the `SERVER_ENTRY` constant in
+`tests/server/helpers/serverProcess.ts` (or `TEST_SERVER_ENTRY` env) plus the env contract
+(`PORT`, `HOST`, `REDIS_URL`).
+
+Redis for the tests comes from `TEST_REDIS_URL` if set (CI), otherwise a throwaway `redis-server`
+on a random port is started. Without `redis-server` installed the Redis-dependent suites are
+skipped locally (and fail in CI).
+
+Store tests (`tests/server/gameStore.test.ts`) exercise the `GameStore` interface of both
+implementations, so any new implementation can be added to the `implementations` list.

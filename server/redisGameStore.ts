@@ -73,6 +73,10 @@ export class RedisGameStore implements GameStore {
     await this.redis.del(this.roomKey(roomId))
   }
 
+  async close(): Promise<void> {
+    await this.redis.quit()
+  }
+
   async withLock<T>(roomId: string, callback: () => Promise<T>): Promise<T> {
     const key = this.lockKey(roomId)
     const token = `${process.pid}:${Math.random().toString(36).slice(2)}`
