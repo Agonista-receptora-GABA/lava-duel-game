@@ -1,73 +1,44 @@
 # lava-duel-game
 
-This template should help get you started developing with Vue 3 in Vite.
+A web-app game inspired by The Floor TV game show.
 
-## Recommended IDE Setup
+Uses TS, Node.js, Express, and websockets (socket.io) for game rooms.
+The client is written in Vue 3 powered by Vite.
 
-[VS Code](https://code.visualstudio.com/) + [Vue (Official)](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).
+The project is a monorepo:
 
-## Recommended Browser Setup
+- backend is placed in `server` directory
+- frontend is placed in `src` directory.
 
-- Chromium-based browsers (Chrome, Edge, Brave, etc.):
-  - [Vue.js devtools](https://chromewebstore.google.com/detail/vuejs-devtools/nhdogjmejiglipccpnnnanhbledajbpd) 
-  - [Turn on Custom Object Formatter in Chrome DevTools](http://bit.ly/object-formatters)
-- Firefox:
-  - [Vue.js devtools](https://addons.mozilla.org/en-US/firefox/addon/vue-js-devtools/)
-  - [Turn on Custom Object Formatter in Firefox DevTools](https://fxdx.dev/firefox-devtools-custom-object-formatters/)
+The shared TS types are placed in `shared/types` directory.
 
-## Type Support for `.vue` Imports in TS
+## Redis + horizontal scaling
 
-TypeScript cannot handle type information for `.vue` imports by default, so we replace the `tsc` CLI with `vue-tsc` for type checking. In editors, we need [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) to make the TypeScript language service aware of `.vue` types.
+This project uses Redis store for managing game rooms. It's required to make the
+app work correctly when there's more than one app's instance in k8s.
 
-## Customize configuration
+### Testing locally
 
-See [Vite Configuration Reference](https://vite.dev/config/).
+#### Prerequisites
 
-## Project Setup
+You need to have `redis-server` installed on your machine.
+Also don't forget hitting `nvm use` on each terminal session to ensure the
+correct Node.js version (to avoid potential problems).
 
-```sh
-npm install
-```
+#### Simulation of multiple backends & clients
 
-### Compile and Hot-Reload for Development
+To check if it works locally, you'll need 5 terminals opened. Run:
 
-```sh
-npm run dev
-```
+- redis (`redis-server` in cmd, it'll run as a background process)
+- 2 backends (use `npm run dev:server1` & `npm run dev:server2` on separated
+  terminals)
+- 2 clients (use `npm run dev:fe1` & `npm run dev:fe2` on separated terminals),
+  then run them in 2 separate browser tabs
+- 1 `redis-cli` in a separated terminal
 
-### Type-Check, Compile and Minify for Production
-
-```sh
-npm run build
-```
-
-### Run Unit Tests with [Vitest](https://vitest.dev/)
-
-```sh
-npm run test:unit
-```
-
-### Run End-to-End Tests with [Playwright](https://playwright.dev)
-
-```sh
-# Install browsers for the first run
-npx playwright install
-
-# When testing on CI, must build the project first
-npm run build
-
-# Runs the end-to-end tests
-npm run test:e2e
-# Runs the tests only on Chromium
-npm run test:e2e -- --project=chromium
-# Runs the tests of a specific file
-npm run test:e2e -- tests/example.spec.ts
-# Runs the tests in debug mode
-npm run test:e2e -- --debug
-```
-
-### Lint with [ESLint](https://eslint.org/)
-
-```sh
-npm run lint
-```
+Then join a common room on both clients, and check if those 2 players can start
+a duel.
+Then go to the Redis CLI and check that there's just only one common key for the
+room, using `KEYS *`.
+For example, if you used `pokoj-1` as the common room name, it'll be:
+`1) "lava-duel:room:pokoj-1"`.
