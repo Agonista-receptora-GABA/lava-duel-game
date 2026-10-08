@@ -36,6 +36,14 @@ export class MemoryGameStore implements GameStore {
     return callback()
   }
 
+  async close(): Promise<void> {
+    for (const timer of this.emptyRoomTimers.values()) {
+      clearTimeout(timer)
+    }
+
+    this.emptyRoomTimers.clear()
+  }
+
   private clearEmptyRoomTimer(roomId: string) {
     const timer = this.emptyRoomTimers.get(roomId)
 

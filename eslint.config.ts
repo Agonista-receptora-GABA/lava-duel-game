@@ -23,7 +23,18 @@ export default defineConfigWithVueTs(
   
   {
     ...pluginVitest.configs.recommended,
-    files: ['src/**/__tests__/*'],
+    files: ['src/**/__tests__/*', 'tests/**/*.test.ts'],
+  },
+
+  {
+    // TestClient helpers throw on failure, so they count as assertions in server tests
+    files: ['tests/**/*.test.ts'],
+    rules: {
+      'vitest/expect-expect': [
+        'error',
+        { assertFunctionNames: ['expect', '*.expectNoEvent', '*.waitFor', '*.waitForCount'] },
+      ],
+    },
   },
   
   {

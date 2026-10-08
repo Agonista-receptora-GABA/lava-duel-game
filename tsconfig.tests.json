@@ -1,0 +1,12 @@
+{
+  "extends": "@tsconfig/node22/tsconfig.json",
+  "include": ["tests/**/*.ts", "server/**/*.ts", "shared/**/*.ts"],
+  "compilerOptions": {
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "types": ["node"],
+    "paths": {
+      "@shared/*": ["./shared/*"]
+    }
+  }
+}
