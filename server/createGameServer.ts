@@ -9,6 +9,7 @@ import type { GameStore } from './gameStore.ts'
 import { MemoryGameStore } from './memoryGameStore.js'
 import { RedisGameStore } from './redisGameStore.js'
 import { whenHandlersIdle } from './socket/enqueue.js'
+import { MAX_PAYLOAD_BYTES } from './socket/schemas.js'
 import { registerSocketHandlers } from './socket/registerHandlers.js'
 
 /**
@@ -20,6 +21,8 @@ export function createGameServer(config: ServerConfig) {
 
   const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
     cors: { origin: config.corsOrigin },
+    // Default is 1 MB; a bigger message closes the connection instead of reaching the handlers.
+    maxHttpBufferSize: MAX_PAYLOAD_BYTES,
   })
 
   const { redisUrl } = config

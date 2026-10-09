@@ -1,10 +1,18 @@
 import { startDuel } from '../../game/duel.js'
 import { assertInRoom } from '../assertInRoom.js'
 import { enqueue } from '../enqueue.js'
+import { parsePayload } from '../parsePayload.js'
+import { startDuelSchema } from '../schemas.js'
 import type { HandlerContext } from '../types.ts'
 
 export function registerStartDuelHandler({ io, socket, store }: HandlerContext) {
-  socket.on('startDuel', ({ roomId, aId, bId }) =>
+  socket.on('startDuel', (raw) => {
+    const payload = parsePayload(socket, startDuelSchema, raw)
+
+    if (!payload) return
+
+    const { roomId, aId, bId } = payload
+
     enqueue(socket, async () => {
       if (!assertInRoom(socket, roomId)) return
 
@@ -30,6 +38,6 @@ export function registerStartDuelHandler({ io, socket, store }: HandlerContext) 
           score: duel.score,
         })
       })
-    }),
-  )
+    })
+  })
 }

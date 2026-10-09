@@ -1,10 +1,18 @@
 import { applyAnswer } from '../../game/duel.js'
 import { assertInRoom } from '../assertInRoom.js'
 import { enqueue } from '../enqueue.js'
+import { parsePayload } from '../parsePayload.js'
+import { answerSchema } from '../schemas.js'
 import type { HandlerContext } from '../types.ts'
 
 export function registerAnswerHandler({ io, socket, store }: HandlerContext) {
-  socket.on('answer', ({ roomId, text }) =>
+  socket.on('answer', (raw) => {
+    const payload = parsePayload(socket, answerSchema, raw)
+
+    if (!payload) return
+
+    const { roomId, text } = payload
+
     enqueue(socket, async () => {
       if (!assertInRoom(socket, roomId)) return
 
@@ -59,6 +67,6 @@ export function registerAnswerHandler({ io, socket, store }: HandlerContext) {
             return
         }
       })
-    }),
-  )
+    })
+  })
 }

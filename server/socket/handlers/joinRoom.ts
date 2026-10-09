@@ -1,10 +1,18 @@
 import { addPlayer, createRoom, isRoomFull, pruneDisconnectedPlayers } from '../../game/room.js'
 import { emitRoomState } from '../emitRoomState.js'
 import { enqueue } from '../enqueue.js'
+import { parsePayload } from '../parsePayload.js'
+import { joinRoomSchema } from '../schemas.js'
 import type { HandlerContext } from '../types.ts'
 
 export function registerJoinRoomHandler({ io, socket, store }: HandlerContext) {
-  socket.on('joinRoom', ({ roomId, name }) =>
+  socket.on('joinRoom', (raw) => {
+    const payload = parsePayload(socket, joinRoomSchema, raw)
+
+    if (!payload) return
+
+    const { roomId, name } = payload
+
     enqueue(socket, async () => {
       // Join the Socket.IO room first so this socket is visible in fetchSockets()
       await socket.join(roomId)
@@ -32,6 +40,6 @@ export function registerJoinRoomHandler({ io, socket, store }: HandlerContext) {
       })
 
       if (!accepted) await socket.leave(roomId)
-    }),
-  )
+    })
+  })
 }

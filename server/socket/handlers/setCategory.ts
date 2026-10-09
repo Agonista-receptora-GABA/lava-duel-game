@@ -2,10 +2,18 @@ import { applyCategory } from '../../game/deck.js'
 import { createRoom } from '../../game/room.js'
 import { assertInRoom } from '../assertInRoom.js'
 import { enqueue } from '../enqueue.js'
+import { parsePayload } from '../parsePayload.js'
+import { setCategorySchema } from '../schemas.js'
 import type { HandlerContext } from '../types.ts'
 
 export function registerSetCategoryHandler({ io, socket, store }: HandlerContext) {
-  socket.on('setCategory', ({ roomId, category, deck }) =>
+  socket.on('setCategory', (raw) => {
+    const payload = parsePayload(socket, setCategorySchema, raw)
+
+    if (!payload) return
+
+    const { roomId, category, deck } = payload
+
     enqueue(socket, async () => {
       if (!assertInRoom(socket, roomId)) return
 
@@ -28,6 +36,6 @@ export function registerSetCategoryHandler({ io, socket, store }: HandlerContext
           current: room.current,
         })
       })
-    }),
-  )
+    })
+  })
 }
