@@ -1,9 +1,14 @@
+import fs from 'node:fs'
 import path from 'node:path'
 import cors from 'cors'
 import express from 'express'
 
 export function createApp({ clientDir }: { clientDir: string }) {
   const app = express()
+
+  if (!fs.existsSync(path.join(clientDir, 'index.html'))) {
+    console.warn(`[static] no frontend build in ${clientDir} - serving the API only`)
+  }
 
   app.use(cors())
   app.use(express.static(clientDir))
