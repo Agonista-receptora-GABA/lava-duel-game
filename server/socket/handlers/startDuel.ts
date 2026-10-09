@@ -1,11 +1,14 @@
 import { startDuel } from '../../game/duel.js'
+import { assertInRoom } from '../assertInRoom.js'
 import { enqueue } from '../enqueue.js'
 import type { HandlerContext } from '../types.ts'
 
 export function registerStartDuelHandler({ io, socket, store }: HandlerContext) {
   socket.on('startDuel', ({ roomId, aId, bId }) =>
-    enqueue(socket, () =>
-      store.withLock(roomId, async () => {
+    enqueue(socket, async () => {
+      if (!assertInRoom(socket, roomId)) return
+
+      return store.withLock(roomId, async () => {
         const room = await store.get(roomId)
 
         if (!room) {
@@ -26,7 +29,7 @@ export function registerStartDuelHandler({ io, socket, store }: HandlerContext) 
           turnId: duel.turnId,
           score: duel.score,
         })
-      }),
-    ),
+      })
+    }),
   )
 }

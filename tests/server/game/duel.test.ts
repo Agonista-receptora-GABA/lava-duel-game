@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { Card, RoomState } from '../../../shared/types/events.ts'
 import { applyCategory } from '../../../server/game/deck.ts'
-import { applyAnswer, startDuel } from '../../../server/game/duel.ts'
+import { applyAnswer, applyPass, startDuel } from '../../../server/game/duel.ts'
 import { addPlayer, createRoom } from '../../../server/game/room.ts'
 
 const deck: Card[] = [
@@ -96,10 +96,36 @@ describe('game/duel', () => {
       expect(room.duel!.score).toEqual({ a: 0, b: 0 })
     })
 
-    // Documents the current behaviour (see the NOTE in duel.ts) - flip this test when PAS gets
-    // restricted to the player who is on the move.
-    it('currently lets anybody in the room skip a card with PAS', () => {
-      expect(applyAnswer(room, 'c', 'pas', () => 0.99)).toEqual({ type: 'pass' })
+    it('rejects PAS (spoken or not) from a player who is not on the move', () => {
+      expect(applyAnswer(room, 'b', 'pas', () => 0.99)).toEqual({ type: 'notYourTurn' })
+      expect(applyAnswer(room, 'c', 'pas', () => 0.99)).toEqual({ type: 'notYourTurn' })
+      expect(room.current).toEqual(deck[0])
+    })
+  })
+
+  describe('applyPass', () => {
+    it('skips the card for the player on the move, keeping turn and score', () => {
+      const room = duelRoom()
+
+      expect(applyPass(room, 'a', () => 0.99)).toEqual({ type: 'pass' })
+      expect(room.current).toEqual(deck[1])
+      expect(room.duel!.turnId).toBe('a')
+      expect(room.duel!.score).toEqual({ a: 0, b: 0 })
+    })
+
+    it('does not let the other duelist or a bystander skip the card', () => {
+      const room = duelRoom()
+
+      expect(applyPass(room, 'b')).toEqual({ type: 'notYourTurn' })
+      expect(applyPass(room, 'c')).toEqual({ type: 'notYourTurn' })
+      expect(room.current).toEqual(deck[0])
+    })
+
+    it('is ignored without a duel or a card', () => {
+      const room = duelRoom()
+
+      room.duel = null
+      expect(applyPass(room, 'a')).toEqual({ type: 'ignored' })
     })
   })
 })

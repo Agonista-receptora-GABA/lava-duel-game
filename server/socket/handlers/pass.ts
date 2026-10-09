@@ -1,29 +1,39 @@
-import { drawNextCard } from '../../game/deck.js'
+import { applyPass } from '../../game/duel.js'
+import { assertInRoom } from '../assertInRoom.js'
 import { enqueue } from '../enqueue.js'
 import type { HandlerContext } from '../types.ts'
 
 export function registerPassHandler({ io, socket, store }: HandlerContext) {
   socket.on('pass', ({ roomId }) =>
-    enqueue(socket, () =>
-      store.withLock(roomId, async () => {
+    enqueue(socket, async () => {
+      if (!assertInRoom(socket, roomId)) return
+
+      return store.withLock(roomId, async () => {
         const room = await store.get(roomId)
 
-        if (!room?.duel) {
+        if (!room) {
           return
         }
 
-        drawNextCard(room)
+        const outcome = applyPass(room, socket.id)
 
-        await store.set(roomId, room)
+        switch (outcome.type) {
+          case 'ignored':
+            return
 
-        if (room.currentIndex === null) {
-          return
+          case 'notYourTurn':
+            io.to(socket.id).emit('notYourTurn', true)
+            return
+
+          case 'pass':
+            await store.set(roomId, room)
+
+            io.to(roomId).emit('currentImage', {
+              current: room.current,
+            })
+            return
         }
-
-        io.to(roomId).emit('currentImage', {
-          current: room.current,
-        })
-      }),
-    ),
+      })
+    }),
   )
 }
