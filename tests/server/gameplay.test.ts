@@ -371,6 +371,74 @@ for (const mode of modes) {
       })
     })
 
+    describe('malformed payloads', () => {
+      const garbage: unknown[][] = [
+        [], // no payload at all
+        [null],
+        ['text'],
+        [42],
+        [{}],
+        [{ roomId: 123 }],
+        [{ roomId: '' }],
+      ]
+      const events = ['joinRoom', 'setCategory', 'startDuel', 'pass', 'answer']
+
+      it('answers every event with an error and keeps the server and the socket alive', async () => {
+        const room = uniqueRoom()
+        const a = await env.connect(0)
+        const b = await env.connect(1)
+
+        await a.join(room, 'Ala')
+        await b.join(room, 'Bob')
+        a.clear()
+
+        let sent = 0
+
+        for (const event of events) {
+          for (const args of garbage) {
+            a.emitRaw(event, ...args)
+            sent++
+          }
+        }
+
+        await a.waitForCount('errorMsg', sent)
+
+        // the same socket still works - the per-socket queue was not poisoned
+        a.emit('setCategory', { roomId: room, category: 'animals', deck: dogDeck })
+        await Promise.all([a.waitFor('categorySet'), b.waitFor('categorySet')])
+        await b.expectNoEvent('errorMsg', 100)
+      })
+
+      it('rejects oversized and ill-shaped fields', async () => {
+        const { room, a, b } = await setupDuel()
+
+        const bad: Array<[string, unknown]> = [
+          ['answer', { roomId: room, text: 'x'.repeat(201) }],
+          ['answer', { roomId: room, text: 42 }],
+          ['joinRoom', { roomId: 'r'.repeat(65), name: 'Ala' }],
+          ['joinRoom', { roomId: room, name: 'n'.repeat(33) }],
+          ['setCategory', { roomId: room, category: 'c', deck: [{ img: 'x.png', aliases: [] }] }],
+          ['setCategory', { roomId: room, category: 'c', deck: [{ img: 'x.png' }] }],
+          ['setCategory', { roomId: room, category: 'c', deck: numberedDeck(201) }],
+          ['setCategory', { roomId: room, category: 'c', deck: 'nope' }],
+          ['startDuel', { roomId: room, aId: a.id }],
+        ]
+
+        a.clear()
+
+        for (const [event, payload] of bad) a.emitRaw(event, payload)
+
+        await a.waitForCount('errorMsg', bad.length)
+
+        // nothing leaked into the room and the running duel is untouched
+        await b.expectNoEvent('categorySet', 100)
+        await b.expectNoEvent('duelStarted', 100)
+
+        a.emit('answer', { roomId: room, text: 'pies' })
+        await b.waitFor('correct')
+      })
+    })
+
     describe('leaving', () => {
       it('ends the duel when one of the duelists disconnects', async () => {
         const { a, b } = await setupDuel()

@@ -45,6 +45,11 @@ export class TestClient {
     ;(this.socket as Socket).emit(event, ...args)
   }
 
+  /** Emits anything, bypassing the typed payloads - for sending malformed data on purpose. */
+  emitRaw(event: string, ...args: unknown[]) {
+    ;(this.socket as Socket).emit(event, ...args)
+  }
+
   /** Joins a room and waits until the server confirmed it (own id present in roomState). */
   async join(roomId: string, name?: string, timeoutMs = 3_000) {
     this.emit('joinRoom', { roomId, name })

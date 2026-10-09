@@ -1,10 +1,18 @@
 import { applyPass } from '../../game/duel.js'
 import { assertInRoom } from '../assertInRoom.js'
 import { enqueue } from '../enqueue.js'
+import { parsePayload } from '../parsePayload.js'
+import { passSchema } from '../schemas.js'
 import type { HandlerContext } from '../types.ts'
 
 export function registerPassHandler({ io, socket, store }: HandlerContext) {
-  socket.on('pass', ({ roomId }) =>
+  socket.on('pass', (raw) => {
+    const payload = parsePayload(socket, passSchema, raw)
+
+    if (!payload) return
+
+    const { roomId } = payload
+
     enqueue(socket, async () => {
       if (!assertInRoom(socket, roomId)) return
 
@@ -34,6 +42,6 @@ export function registerPassHandler({ io, socket, store }: HandlerContext) {
             return
         }
       })
-    }),
-  )
+    })
+  })
 }
