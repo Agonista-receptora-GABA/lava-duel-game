@@ -304,6 +304,54 @@ for (const mode of modes) {
         expect(correct.by).toBe(a.id)
       })
 
+      it('ignores room events from a socket that has not joined the room', async () => {
+        const room = uniqueRoom()
+        const a = await env.connect(0)
+        const outsider = await env.connect(1)
+
+        await a.join(room, 'Ala')
+        a.clear()
+
+        outsider.emit('setCategory', { roomId: room, category: 'hijacked', deck: dogDeck })
+        await outsider.waitFor('errorMsg')
+        await a.expectNoEvent('categorySet')
+
+        // the room still has no category: a late joiner sees nothing hijacked
+        const late = await env.connect(0)
+
+        await late.join(room, 'Late')
+        expect(late.lastOf('roomState')![0].category).toBeNull()
+      })
+
+      it('does not let an outsider steer a running duel', async () => {
+        const { room, a, b } = await setupDuel()
+        const outsider = await env.connect(0)
+
+        outsider.emit('answer', { roomId: room, text: 'pies' })
+        outsider.emit('answer', { roomId: room, text: 'pas' })
+        outsider.emit('pass', { roomId: room })
+        outsider.emit('startDuel', { roomId: room, aId: outsider.id, bId: a.id })
+        await outsider.waitForCount('errorMsg', 4)
+
+        for (const client of [a, b]) {
+          await client.expectNoEvent('correct', 100)
+          await client.expectNoEvent('passed', 100)
+          await client.expectNoEvent('currentImage', 100)
+          await client.expectNoEvent('duelStarted', 100)
+        }
+      })
+
+      it('lets only the player on the move PAS', async () => {
+        const { room, a, b } = await setupDuel()
+
+        b.emit('answer', { roomId: room, text: 'pas' })
+        b.emit('pass', { roomId: room })
+        await b.waitForCount('notYourTurn', 2)
+
+        await a.expectNoEvent('passed', 100)
+        await a.expectNoEvent('currentImage', 100)
+      })
+
       it('processes events of one client in the order they were sent', async () => {
         const room = uniqueRoom()
         const b = await env.connect(1)

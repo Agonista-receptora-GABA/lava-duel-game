@@ -20,13 +20,32 @@ export function startDuel(room: RoomState, aId: string, bId: string): DuelState 
   return room.duel
 }
 
+/** What happened to a PAS - shared by the `pass` event and the spoken word "pas". */
+export type PassOutcome = { type: 'ignored' } | { type: 'notYourTurn' } | { type: 'pass' }
+
 /** What happened to an answer - the socket handler turns this into events. */
 export type AnswerOutcome =
-  | { type: 'ignored' }
-  | { type: 'pass' }
-  | { type: 'notYourTurn' }
+  | PassOutcome
   | { type: 'correct'; score: Record<string, number>; turnId: string }
   | { type: 'wrong'; guess: string }
+
+/**
+ * PAS skips the current card; only the duelist who is on the move may do it.
+ * Mutates the room (next card) - the caller persists it and emits events.
+ */
+export function applyPass(
+  room: RoomState,
+  playerId: string,
+  random: () => number = Math.random,
+): PassOutcome {
+  if (!room.duel || room.currentIndex === null) return { type: 'ignored' }
+
+  if (playerId !== room.duel.turnId) return { type: 'notYourTurn' }
+
+  drawNextCard(room, random)
+
+  return { type: 'pass' }
+}
 
 /**
  * Applies an answer of `playerId` to the room (mutates it: score, turn, next card).
@@ -48,11 +67,7 @@ export function applyAnswer(
     .trim()
     .toLowerCase()
 
-  // NOTE: PAS is checked before whose turn it is - any player of the room can currently skip a card.
-  if (normalized === PASS_WORD) {
-    drawNextCard(room, random)
-    return { type: 'pass' }
-  }
+  if (normalized === PASS_WORD) return applyPass(room, playerId, random)
 
   if (playerId !== duel.turnId) {
     return { type: 'notYourTurn' }
