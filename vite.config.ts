@@ -10,6 +10,12 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [vue(), vueDevTools()],
+    build: {
+      // Keep in sync with `clientDir` in server/config.ts. The frontend must live in its own
+      // directory: `tsc` writes the server to dist/server, and express.static serves clientDir.
+      outDir: 'dist/client',
+      emptyOutDir: true,
+    },
     server: {
       proxy: {
         '/socket.io': {
