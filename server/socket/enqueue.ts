@@ -7,6 +7,9 @@ import type { AppSocket } from './types.ts'
 //    so a transient Redis problem would restart the whole pod.
 const socketQueues = new WeakMap<AppSocket, Promise<void>>()
 
+// Tasks that have not finished yet - lets a graceful shutdown wait for them (see whenHandlersIdle).
+const inFlight = new Set<Promise<void>>()
+
 export function enqueue(socket: AppSocket, task: () => Promise<unknown>) {
   const next = (socketQueues.get(socket) ?? Promise.resolve())
     .then(task)
@@ -17,4 +20,17 @@ export function enqueue(socket: AppSocket, task: () => Promise<unknown>) {
     })
 
   socketQueues.set(socket, next)
+
+  inFlight.add(next)
+
+  const forget = () => inFlight.delete(next)
+
+  next.then(forget, forget)
+}
+
+/** Resolves once every queued handler (including ones queued meanwhile) has finished. */
+export async function whenHandlersIdle() {
+  while (inFlight.size > 0) {
+    await Promise.allSettled([...inFlight])
+  }
 }
