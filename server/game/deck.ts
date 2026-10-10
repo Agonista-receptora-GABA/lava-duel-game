@@ -25,15 +25,23 @@ export function drawNextCard(room: RoomState, random: () => number = Math.random
   return idx
 }
 
-/** Switches the room to a new category with its own deck and draws the first card. */
+/**
+ * Switches the room to a new category with its own deck and draws the first card.
+ * Returns the index of that card, or null when the deck is empty (or not an array) - in that case
+ * the room is left untouched, so the previous category, deck and card stay valid. The caller must
+ * use the return value to decide whether anything changed (`room.currentIndex` would still hold
+ * the previous card).
+ */
 export function applyCategory(
   room: RoomState,
   category: string,
   deck: Card[],
   random: () => number = Math.random,
-) {
+): number | null {
+  if (!Array.isArray(deck) || deck.length === 0) return null
+
   room.category = category
-  room.deck = Array.isArray(deck) ? deck : []
+  room.deck = deck
   room.used.clear()
 
   return drawNextCard(room, random)

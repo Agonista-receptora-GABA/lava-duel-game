@@ -20,13 +20,14 @@ export function registerSetCategoryHandler({ io, socket, store }: HandlerContext
       return store.withLock(roomId, async () => {
         const room = (await store.get(roomId)) || createRoom()
 
-        applyCategory(room, category, deck)
-
-        await store.set(roomId, room)
-
-        if (room.currentIndex === null) {
+        // The draw result decides, not room.currentIndex: after an earlier category it still holds
+        // the previous card, so an empty deck would re-broadcast it.
+        if (applyCategory(room, category, deck) === null) {
+          socket.emit('errorMsg', 'Talia jest pusta')
           return
         }
+
+        await store.set(roomId, room)
 
         io.to(roomId).emit('categorySet', {
           category,

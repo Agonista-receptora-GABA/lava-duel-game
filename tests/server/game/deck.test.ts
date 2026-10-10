@@ -80,14 +80,24 @@ describe('game/deck', () => {
       expect(room.used).toEqual(new Set([2]))
     })
 
+    it('rejects an empty deck and leaves the room exactly as it was', () => {
+      const room = roomWithDeck(3)
+
+      applyCategory(room, 'first', room.deck, () => 0)
+
+      const before = structuredClone(room)
+
+      expect(applyCategory(room, 'empty', [])).toBeNull()
+      expect(room).toEqual(before)
+    })
+
     it('treats a deck that is not an array as empty', () => {
       const room = createRoom()
 
-      const idx = applyCategory(room, 'broken', undefined as unknown as Card[])
-
-      expect(idx).toBeNull()
+      expect(applyCategory(room, 'broken', undefined as unknown as Card[])).toBeNull()
+      expect(room.category).toBeNull()
       expect(room.deck).toEqual([])
-      expect(room.category).toBe('broken')
+      expect(room.current).toBeNull()
     })
   })
 })
