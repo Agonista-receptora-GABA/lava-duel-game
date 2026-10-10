@@ -16,7 +16,17 @@ export function createApp({ clientDir }: { clientDir: string }) {
   // Health check (K8s)
   app.get('/health', (_req, res) => res.status(200).json({ status: 'OK' }))
 
-  app.get('/{*splat}', (_req, res) => res.sendFile(path.join(clientDir, 'index.html')))
+  // Client-side routes get index.html. A path with an extension is a request for a file
+  // (script, image, source map) that express.static did not find: answering it with index.html and
+  // 200 only hides the problem behind a confusing MIME / parse error in the browser.
+  app.get('/{*splat}', (req, res) => {
+    if (path.extname(req.path)) {
+      res.status(404).type('text/plain').send('Not found')
+      return
+    }
+
+    res.sendFile(path.join(clientDir, 'index.html'))
+  })
 
   return app
 }

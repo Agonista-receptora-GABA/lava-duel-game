@@ -44,6 +44,15 @@ describe('createApp', () => {
     expect(await response.text()).toContain('<title>Lava</title>')
   })
 
+  it('answers 404 for a missing file instead of index.html (no 200 with the wrong content)', async () => {
+    for (const url of ['/missing.js', '/assets/missing.css', '/favicon.ico']) {
+      const response = await fetch(`${base}${url}`)
+
+      expect({ url, status: response.status }).toEqual({ url, status: 404 })
+      expect(await response.text()).not.toContain('<title>Lava</title>')
+    }
+  })
+
   it('does not expose server code that sits next to the frontend', async () => {
     for (const url of ['/server/index.js', '/client/../server/index.js']) {
       const body = await (await fetch(`${base}${url}`)).text()
