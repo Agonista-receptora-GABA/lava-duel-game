@@ -2,7 +2,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export interface ServerConfig {
-  port: string | number
+  port: number
   host: string
   /** When set, game state lives in Redis and Socket.IO uses the Redis adapter (multi-instance). */
   redisUrl: string | undefined
@@ -21,9 +21,22 @@ export interface ServerConfig {
 // served by Vite; set CLIENT_DIR=dist/client to serve a production build from tsx.
 const here = path.dirname(fileURLToPath(import.meta.url))
 
+/** PORT / SERVER_PORT from the environment; a typo must fail at startup, not as a vague listen() error. */
+function parsePort(raw: string | undefined): number {
+  if (!raw) return 3000
+
+  const port = Number(raw)
+
+  if (!Number.isInteger(port) || port < 0 || port > 65535) {
+    throw new Error(`Invalid port: "${raw}"`)
+  }
+
+  return port
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   return {
-    port: env.PORT || env.SERVER_PORT || 3000,
+    port: parsePort(env.PORT || env.SERVER_PORT),
     host: env.HOST || '0.0.0.0',
     redisUrl: env.REDIS_URL,
     corsOrigin: env.NODE_ENV === 'production' ? env.CLIENT_ORIGINS?.split(',') || '*' : true,

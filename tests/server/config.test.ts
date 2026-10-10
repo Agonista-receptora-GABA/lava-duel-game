@@ -18,3 +18,22 @@ describe('loadConfig: clientDir', () => {
     expect(loadConfig({ CLIENT_DIR: 'dist/client' }).clientDir).toBe(path.resolve('dist/client'))
   })
 })
+
+describe('loadConfig: port and host', () => {
+  it('uses 3000 and 0.0.0.0 by default - an empty value (Docker ARG without default) counts as unset', () => {
+    expect(loadConfig({})).toMatchObject({ port: 3000, host: '0.0.0.0' })
+    expect(loadConfig({ PORT: '', HOST: '' })).toMatchObject({ port: 3000, host: '0.0.0.0' })
+  })
+
+  it('reads PORT (falling back to SERVER_PORT) as a number, and HOST', () => {
+    expect(loadConfig({ PORT: '8080', HOST: '127.0.0.1' })).toMatchObject({
+      port: 8080,
+      host: '127.0.0.1',
+    })
+    expect(loadConfig({ SERVER_PORT: '3001' }).port).toBe(3001)
+  })
+
+  it.each(['abc', '-1', '70000', '3000.5'])('rejects an invalid port: %s', (port) => {
+    expect(() => loadConfig({ PORT: port })).toThrow('Invalid port')
+  })
+})

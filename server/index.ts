@@ -6,11 +6,12 @@ const SHUTDOWN_TIMEOUT_MS = 10_000
 
 const config = loadConfig()
 
-console.log(`Starting Lava Duel Game on ${config.host}:${config.port}`)
-
 const { httpServer, close } = createGameServer(config)
 
-httpServer.listen(config.port, () => console.log(`Lava Duel Game on ${config.host}:${config.port}`))
+// Without the host argument Node binds to `::` (every interface), whatever HOST says.
+httpServer.listen(config.port, config.host, () =>
+  console.log(`Lava Duel Game on ${config.host}:${config.port}`),
+)
 
 let shuttingDown = false
 
