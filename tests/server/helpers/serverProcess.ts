@@ -19,12 +19,15 @@ export interface RunningServer {
   kill(): Promise<void>
 }
 
-export async function startServer(options: { redisUrl?: string } = {}): Promise<RunningServer> {
+export async function startServer(
+  options: { redisUrl?: string; host?: string } = {},
+): Promise<RunningServer> {
+  const host = options.host ?? '127.0.0.1'
   const port = await getFreePort()
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     PORT: String(port),
-    HOST: '127.0.0.1',
+    HOST: host,
     NODE_ENV: 'test',
     TSX_TSCONFIG_PATH: 'tsconfig.server.json',
   }
@@ -47,7 +50,7 @@ export async function startServer(options: { redisUrl?: string } = {}): Promise<
   child.stderr.on('data', (chunk) => (output += chunk))
   child.once('exit', () => (exited = true))
 
-  const url = `http://127.0.0.1:${port}`
+  const url = `http://${host}:${port}`
   const deadline = Date.now() + 30_000
 
   for (;;) {
