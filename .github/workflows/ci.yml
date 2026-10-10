@@ -45,3 +45,8 @@ jobs:
 
       - name: Tests (unit + server)
         run: npm test
+
+      - name: Build and smoke-test the production server
+        run: |
+          npm run build
+          npm run smoke
