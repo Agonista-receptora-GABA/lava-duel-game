@@ -1,4 +1,4 @@
-import type { RoomState, RoomStatePayload } from '@shared/types/events.ts'
+import type { Card, PublicCard, RoomState, RoomStatePayload } from '@shared/types/events.ts'
 
 export const MAX_PLAYERS = 100
 export const DEFAULT_PLAYER_NAME = 'Gracz'
@@ -7,7 +7,7 @@ export function createRoom(): RoomState {
   return {
     players: new Map(),
     max: MAX_PLAYERS,
-    category: null,
+    categoryId: null,
     deck: [],
     used: new Set(),
     currentIndex: null,
@@ -55,7 +55,7 @@ export function toRoomStatePayload(room: RoomState): RoomStatePayload {
       id,
       name: player.name,
     })),
-    category: room.category,
+    categoryId: room.categoryId,
     duel: room.duel
       ? {
           aId: room.duel.aId,
@@ -64,6 +64,10 @@ export function toRoomStatePayload(room: RoomState): RoomStatePayload {
           score: room.duel.score,
         }
       : null,
-    current: room.current,
+    current: toPublicCard(room.current),
   }
+}
+
+export function toPublicCard(card: Card | null): PublicCard | null {
+  return card ? { img: card.img } : null
 }

@@ -67,4 +67,16 @@ describe('createApp', () => {
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ status: 'OK' })
   })
+
+  it('returns public category metadata without card answers', async () => {
+    const response = await fetch(`${base}/api/categories`)
+    const categories = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(categories).toEqual([
+      { id: 'polish-athletes', label: 'Polscy sportowcy' },
+      { id: 'spices-and-herbs', label: 'Przyprawy i zioła' },
+    ])
+    expect(JSON.stringify(categories)).not.toContain('aliases')
+  })
 })

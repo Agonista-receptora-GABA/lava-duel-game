@@ -12,6 +12,12 @@ The project is a monorepo:
 
 The shared TS types are placed in `shared/types` directory.
 
+Deck definitions and answer aliases live in `server/game/catalog.ts`. The client
+loads public category IDs and labels from `GET /api/categories`, then sends only
+the selected category ID over Socket.IO. Card image files stay in `public/img`
+and are served as static frontend assets; game events expose image URLs without
+the server-only answer aliases.
+
 ## Redis + horizontal scaling
 
 This project uses Redis store for managing game rooms. It's required to make the

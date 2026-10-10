@@ -87,7 +87,7 @@ describe('game/room', () => {
     it('turns Maps/Sets into a plain, serializable payload', () => {
       const room = roomWithDuel()
 
-      room.category = 'animals'
+      room.categoryId = 'animals'
 
       expect(toRoomStatePayload(room)).toEqual({
         players: [
@@ -95,7 +95,7 @@ describe('game/room', () => {
           { id: 'b', name: 'Bob' },
           { id: 'c', name: 'Cezary' },
         ],
-        category: 'animals',
+        categoryId: 'animals',
         duel: { aId: 'a', bId: 'b', turnId: 'a', score: { a: 0, b: 0 } },
         current: null,
       })

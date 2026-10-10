@@ -34,13 +34,13 @@ export function drawNextCard(room: RoomState, random: () => number = Math.random
  */
 export function applyCategory(
   room: RoomState,
-  category: string,
+  categoryId: string,
   deck: Card[],
   random: () => number = Math.random,
 ): number | null {
   if (!Array.isArray(deck) || deck.length === 0) return null
 
-  room.category = category
+  room.categoryId = categoryId
   room.deck = deck
   room.used.clear()
 

@@ -21,7 +21,7 @@ function sampleRoom(overrides: Partial<RoomState> = {}): RoomState {
       ['p2', { id: 'p2', name: 'Bob' }],
     ]),
     max: 100,
-    category: 'animals',
+    categoryId: 'animals',
     deck: [
       { img: 'dog.png', aliases: ['pies', 'dog'] },
       { img: 'cat.png', aliases: ['kot'] },
@@ -70,11 +70,11 @@ for (const impl of implementations) {
       const id = uniqueRoom()
 
       await store.set(id, sampleRoom())
-      await store.set(id, sampleRoom({ category: 'cars', duel: null }))
+      await store.set(id, sampleRoom({ categoryId: 'cars', duel: null }))
 
       const loaded = await store.get(id)
 
-      expect(loaded?.category).toBe('cars')
+      expect(loaded?.categoryId).toBe('cars')
       expect(loaded?.duel).toBeNull()
     })
 

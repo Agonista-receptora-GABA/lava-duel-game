@@ -1,4 +1,5 @@
 import { applyPass } from '../../game/duel.js'
+import { toPublicCard } from '../../game/room.js'
 import { assertInRoom } from '../assertInRoom.js'
 import { enqueue } from '../enqueue.js'
 import { parsePayload } from '../parsePayload.js'
@@ -37,7 +38,7 @@ export function registerPassHandler({ io, socket, store }: HandlerContext) {
             await store.set(roomId, room)
 
             io.to(roomId).emit('currentImage', {
-              current: room.current,
+                current: toPublicCard(room.current),
             })
             return
         }

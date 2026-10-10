@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import cors from 'cors'
 import express from 'express'
+import { listPublicCategories } from './game/catalog.js'
 
 export function createApp({ clientDir }: { clientDir: string }) {
   const app = express()
@@ -15,6 +16,7 @@ export function createApp({ clientDir }: { clientDir: string }) {
 
   // Health check (K8s)
   app.get('/health', (_req, res) => res.status(200).json({ status: 'OK' }))
+  app.get('/api/categories', (_req, res) => res.status(200).json(listPublicCategories()))
 
   // Client-side routes get index.html. A path with an extension is a request for a file
   // (script, image, source map) that express.static did not find: answering it with index.html and

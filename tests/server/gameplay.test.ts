@@ -1,5 +1,4 @@
 import { afterAll, describe, expect, it } from 'vitest'
-import type { Card } from '../../shared/types/events.ts'
 import { startRedis } from './helpers/redis.ts'
 import { uniqueRoom, useServers } from './helpers/servers.ts'
 
@@ -17,9 +16,10 @@ const modes = [
   { name: 'two instances + Redis', pods: 2, useRedis: true },
 ]
 
-const dogDeck: Card[] = [{ img: 'dog.png', aliases: ['pies'] }]
-const numberedDeck = (size: number): Card[] =>
-  Array.from({ length: size }, (_, i) => ({ img: `card-${i}.png`, aliases: [`answer-${i}`] }))
+const HERBS_CATEGORY_ID = 'spices-and-herbs'
+const ATHLETES_CATEGORY_ID = 'polish-athletes'
+const answerForImage = (img: string | undefined) =>
+  img?.endsWith('/bazylia.jpg') ? 'bazylia' : 'rozmaryn'
 
 for (const mode of modes) {
   const suite = mode.useRedis && !redis ? describe.skip : describe
@@ -28,7 +28,7 @@ for (const mode of modes) {
     const env = useServers({ pods: mode.pods, redisUrl: mode.useRedis ? redis?.url : undefined })
 
     /** Two players in a room, category set, duel started (a moves first). Event history cleared. */
-    async function setupDuel(deck: Card[] = dogDeck) {
+    async function setupDuel(categoryId = HERBS_CATEGORY_ID) {
       const room = uniqueRoom()
       const a = await env.connect(0)
       const b = await env.connect(1)
@@ -36,8 +36,11 @@ for (const mode of modes) {
       await a.join(room, 'Ala')
       await b.join(room, 'Bob')
 
-      a.emit('setCategory', { roomId: room, category: 'animals', deck })
-      await Promise.all([a.waitFor('currentImage'), b.waitFor('currentImage')])
+      a.emit('setCategory', { roomId: room, categoryId })
+      const [[firstImage]] = await Promise.all([
+        a.waitFor('currentImage'),
+        b.waitFor('currentImage'),
+      ])
 
       a.emit('startDuel', { roomId: room, aId: a.id, bId: b.id })
       await Promise.all([a.waitFor('duelStarted'), b.waitFor('duelStarted')])
@@ -45,7 +48,13 @@ for (const mode of modes) {
       a.clear()
       b.clear()
 
-      return { room, a, b }
+      return {
+        room,
+        a,
+        b,
+        firstImg: firstImage.current?.img,
+        firstAnswer: answerForImage(firstImage.current?.img),
+      }
     }
 
     describe('joining a room', () => {
@@ -83,7 +92,7 @@ for (const mode of modes) {
         await b.join(uniqueRoom(), 'Bob')
         b.clear()
 
-        a.emit('setCategory', { roomId: 'whatever', category: 'x', deck: dogDeck })
+        a.emit('setCategory', { roomId: 'whatever', categoryId: HERBS_CATEGORY_ID })
 
         await b.expectNoEvent('categorySet')
         await b.expectNoEvent('roomState')
@@ -123,14 +132,15 @@ for (const mode of modes) {
         await a.join(room, 'Ala')
         await b.join(room, 'Bob')
 
-        a.emit('setCategory', { roomId: room, category: 'animals', deck: numberedDeck(3) })
+        a.emit('setCategory', { roomId: room, categoryId: ATHLETES_CATEGORY_ID })
 
         for (const client of [a, b]) {
           const [category] = await client.waitFor('categorySet')
           const [image] = await client.waitFor('currentImage')
 
-          expect(category).toEqual({ category: 'animals' })
-          expect(image.current?.img).toMatch(/^card-\d\.png$/)
+          expect(category).toEqual({ categoryId: ATHLETES_CATEGORY_ID })
+          expect(image.current?.img).toMatch(/^\/img\/polish-athletes\//)
+          expect(image.current).not.toHaveProperty('aliases')
         }
       })
 
@@ -139,7 +149,7 @@ for (const mode of modes) {
         const a = await env.connect(0)
 
         await a.join(room, 'Ala')
-        a.emit('setCategory', { roomId: room, category: 'animals', deck: dogDeck })
+        a.emit('setCategory', { roomId: room, categoryId: HERBS_CATEGORY_ID })
         await a.waitFor('currentImage')
 
         const b = await env.connect(1)
@@ -148,8 +158,8 @@ for (const mode of modes) {
 
         const [state] = b.lastOf('roomState')!
 
-        expect(state.category).toBe('animals')
-        expect(state.current).toEqual(dogDeck[0])
+        expect(state.categoryId).toBe(HERBS_CATEGORY_ID)
+        expect(state.current).toEqual({ img: expect.stringMatching(/^\/img\/spices-and-herbs\//) })
       })
 
       it('always announces a new category, whichever card gets picked first', async () => {
@@ -160,33 +170,33 @@ for (const mode of modes) {
         await a.join(room, 'Ala')
 
         for (let attempt = 1; attempt <= 25; attempt++) {
-          a.emit('setCategory', { roomId: room, category: `cat-${attempt}`, deck: numberedDeck(2) })
-          await a.waitFor('categorySet', (c) => c.category === `cat-${attempt}`)
+          a.emit('setCategory', { roomId: room, categoryId: ATHLETES_CATEGORY_ID })
+          await a.waitFor('categorySet', (c) => c.categoryId === ATHLETES_CATEGORY_ID)
         }
       })
 
       it('shows every card once before any card repeats', async () => {
-        const { room, a, b } = await setupDuel(numberedDeck(4))
+        const { room, a, b } = await setupDuel()
 
         // setupDuel cleared history; restart the deck so the first card is recorded
-        a.emit('setCategory', { roomId: room, category: 'again', deck: numberedDeck(4) })
+        a.emit('setCategory', { roomId: room, categoryId: HERBS_CATEGORY_ID })
         await a.waitForCount('currentImage', 1)
 
         // a new category ends the duel, and PAS needs a running one
         a.emit('startDuel', { roomId: room, aId: a.id, bId: b.id })
         await a.waitFor('duelStarted')
 
-        for (let i = 2; i <= 4; i++) {
+        for (let i = 2; i <= 2; i++) {
           a.emit('pass', { roomId: room })
           await a.waitForCount('currentImage', i)
         }
 
         const shown = a.eventsOf('currentImage').map(([image]) => image.current?.img)
 
-        expect(new Set(shown).size).toBe(4)
+        expect(new Set(shown).size).toBe(2)
 
         a.emit('pass', { roomId: room })
-        await a.waitForCount('currentImage', 5)
+        await a.waitForCount('currentImage', 3)
         expect(shown).toContain(a.lastOf('currentImage')![0].current?.img)
       })
 
@@ -195,7 +205,7 @@ for (const mode of modes) {
         const first = await env.connect(0)
 
         await first.join(room, 'Ala')
-        first.emit('setCategory', { roomId: room, category: 'animals', deck: dogDeck })
+        first.emit('setCategory', { roomId: room, categoryId: HERBS_CATEGORY_ID })
         await first.waitFor('categorySet')
         first.disconnect()
 
@@ -205,8 +215,8 @@ for (const mode of modes) {
 
         const [state] = again.lastOf('roomState')!
 
-        expect(state.category).toBe('animals')
-        expect(state.current).toEqual(dogDeck[0])
+        expect(state.categoryId).toBe(HERBS_CATEGORY_ID)
+        expect(state.current).toEqual({ img: expect.stringMatching(/^\/img\/spices-and-herbs\//) })
       })
     })
 
@@ -244,10 +254,10 @@ for (const mode of modes) {
       })
 
       it('scores a correct answer, hands over the turn and shows the next card', async () => {
-        const { room, a, b } = await setupDuel()
+        const { room, a, b, firstAnswer } = await setupDuel()
 
         // the answer is trimmed and case-insensitive
-        a.emit('answer', { roomId: room, text: '  PIES ' })
+        a.emit('answer', { roomId: room, text: `  ${firstAnswer.toUpperCase()} ` })
 
         for (const client of [a, b]) {
           const [correct] = await client.waitFor('correct')
@@ -262,17 +272,18 @@ for (const mode of modes) {
       })
 
       it('broadcasts a wrong answer and keeps the turn', async () => {
-        const { room, a, b } = await setupDuel()
+        const { room, a, b, firstAnswer } = await setupDuel()
 
-        a.emit('answer', { roomId: room, text: 'kot' })
+        const wrongAnswer = firstAnswer === 'bazylia' ? 'rozmaryn' : 'bazylia'
+        a.emit('answer', { roomId: room, text: wrongAnswer })
 
         for (const client of [a, b]) {
           const [wrong] = await client.waitFor('wrong')
 
-          expect(wrong).toEqual({ by: a.id, guess: 'kot' })
+          expect(wrong).toEqual({ by: a.id, guess: wrongAnswer })
         }
 
-        a.emit('answer', { roomId: room, text: 'pies' })
+        a.emit('answer', { roomId: room, text: firstAnswer })
         const [correct] = await a.waitFor('correct')
 
         expect(correct.by).toBe(a.id)
@@ -281,7 +292,7 @@ for (const mode of modes) {
       it('tells only the sender that it is not their turn', async () => {
         const { room, a, b } = await setupDuel()
 
-        b.emit('answer', { roomId: room, text: 'pies' })
+        b.emit('answer', { roomId: room, text: 'bazylia' })
 
         const [notYourTurn] = await b.waitFor('notYourTurn')
 
@@ -291,7 +302,7 @@ for (const mode of modes) {
       })
 
       it('shows the next card on PAS without handing over the turn', async () => {
-        const { room, a, b } = await setupDuel()
+        const { room, a, b, firstImg } = await setupDuel()
 
         a.emit('answer', { roomId: room, text: 'pas' })
 
@@ -302,7 +313,11 @@ for (const mode of modes) {
           await client.waitFor('currentImage')
         }
 
-        a.emit('answer', { roomId: room, text: 'pies' })
+        const [nextImage] = await a.waitFor(
+          'currentImage',
+          (payload) => payload.current?.img !== firstImg,
+        )
+        a.emit('answer', { roomId: room, text: answerForImage(nextImage.current?.img) })
         const [correct] = await a.waitFor('correct')
 
         expect(correct.by).toBe(a.id)
@@ -316,7 +331,7 @@ for (const mode of modes) {
         await a.join(room, 'Ala')
         a.clear()
 
-        outsider.emit('setCategory', { roomId: room, category: 'hijacked', deck: dogDeck })
+        outsider.emit('setCategory', { roomId: room, categoryId: 'hijacked' })
         await outsider.waitFor('errorMsg')
         await a.expectNoEvent('categorySet')
 
@@ -324,14 +339,14 @@ for (const mode of modes) {
         const late = await env.connect(0)
 
         await late.join(room, 'Late')
-        expect(late.lastOf('roomState')![0].category).toBeNull()
+        expect(late.lastOf('roomState')![0].categoryId).toBeNull()
       })
 
       it('does not let an outsider steer a running duel', async () => {
         const { room, a, b } = await setupDuel()
         const outsider = await env.connect(0)
 
-        outsider.emit('answer', { roomId: room, text: 'pies' })
+        outsider.emit('answer', { roomId: room, text: 'bazylia' })
         outsider.emit('answer', { roomId: room, text: 'pas' })
         outsider.emit('pass', { roomId: room })
         outsider.emit('startDuel', { roomId: room, aId: outsider.id, bId: a.id })
@@ -363,13 +378,13 @@ for (const mode of modes) {
 
         await a.join(room, 'Ala')
         await b.join(room, 'Bob')
-        a.emit('setCategory', { roomId: room, category: 'animals', deck: dogDeck })
+        a.emit('setCategory', { roomId: room, categoryId: HERBS_CATEGORY_ID })
         // currentImage is emitted right after categorySet - wait for it, or it lands after clear()
         await Promise.all([a.waitFor('currentImage'), b.waitFor('currentImage')])
         a.clear()
         b.clear()
 
-        a.emit('setCategory', { roomId: room, category: 'nothing', deck: [] })
+        a.emit('setCategory', { roomId: room, categoryId: 'unknown-category' })
         await a.waitFor('errorMsg')
 
         // nobody gets a stale card or a category switch...
@@ -383,8 +398,8 @@ for (const mode of modes) {
 
         const state = late.lastOf('roomState')![0]
 
-        expect(state.category).toBe('animals')
-        expect(state.current).toEqual(dogDeck[0])
+        expect(state.categoryId).toBe(HERBS_CATEGORY_ID)
+        expect(state.current).toEqual({ img: expect.stringMatching(/^\/img\/spices-and-herbs\//) })
       })
 
       it('lets only the challenger start a duel (nobody can send one on behalf of others)', async () => {
@@ -405,7 +420,7 @@ for (const mode of modes) {
       })
 
       it('does not let a bystander take over a running duel, and lets a duelist rematch', async () => {
-        const { room, a, b } = await setupDuel()
+        const { room, a, b, firstAnswer } = await setupDuel()
         const c = await env.connect(0)
 
         await c.join(room, 'Cy')
@@ -418,7 +433,7 @@ for (const mode of modes) {
         await a.expectNoEvent('duelStarted', 100)
 
         // the duel between a and b is intact: a still scores
-        a.emit('answer', { roomId: room, text: 'pies' })
+        a.emit('answer', { roomId: room, text: firstAnswer })
         await b.waitFor('correct')
 
         // a duelist may start a new one
@@ -430,7 +445,7 @@ for (const mode of modes) {
       })
 
       it('does not let a bystander change the category during a duel', async () => {
-        const { room, a, b } = await setupDuel()
+        const { room, a, b, firstAnswer } = await setupDuel()
         const c = await env.connect(0)
 
         await c.join(room, 'Cy')
@@ -438,19 +453,19 @@ for (const mode of modes) {
         b.clear()
         c.clear()
 
-        c.emit('setCategory', { roomId: room, category: 'hijacked', deck: numberedDeck(2) })
+        c.emit('setCategory', { roomId: room, categoryId: ATHLETES_CATEGORY_ID })
         await c.waitFor('errorMsg')
         await a.expectNoEvent('categorySet', 100)
         await b.expectNoEvent('duelEnded', 100)
 
-        a.emit('answer', { roomId: room, text: 'pies' })
+        a.emit('answer', { roomId: room, text: firstAnswer })
         await b.waitFor('correct')
       })
 
       it('ends the duel when one of its players changes the category', async () => {
         const { room, a, b } = await setupDuel()
 
-        a.emit('setCategory', { roomId: room, category: 'again', deck: numberedDeck(2) })
+        a.emit('setCategory', { roomId: room, categoryId: ATHLETES_CATEGORY_ID })
 
         await Promise.all([a.waitFor('duelEnded'), b.waitFor('duelEnded')])
         await b.waitFor('categorySet')
@@ -458,7 +473,7 @@ for (const mode of modes) {
 
         // no duel any more: answers are ignored
         b.clear()
-        a.emit('answer', { roomId: room, text: 'answer-0' })
+        a.emit('answer', { roomId: room, text: 'no active duel' })
         await b.expectNoEvent('correct', 100)
         await b.expectNoEvent('wrong', 100)
       })
@@ -515,23 +530,21 @@ for (const mode of modes) {
         await a.waitForCount('errorMsg', sent)
 
         // the same socket still works - the per-socket queue was not poisoned
-        a.emit('setCategory', { roomId: room, category: 'animals', deck: dogDeck })
+        a.emit('setCategory', { roomId: room, categoryId: HERBS_CATEGORY_ID })
         await Promise.all([a.waitFor('categorySet'), b.waitFor('categorySet')])
         await b.expectNoEvent('errorMsg', 100)
       })
 
       it('rejects oversized and ill-shaped fields', async () => {
-        const { room, a, b } = await setupDuel()
+        const { room, a, b, firstAnswer } = await setupDuel()
 
         const bad: Array<[string, unknown]> = [
           ['answer', { roomId: room, text: 'x'.repeat(201) }],
           ['answer', { roomId: room, text: 42 }],
           ['joinRoom', { roomId: 'r'.repeat(65), name: 'Ala' }],
           ['joinRoom', { roomId: room, name: 'n'.repeat(33) }],
-          ['setCategory', { roomId: room, category: 'c', deck: [{ img: 'x.png', aliases: [] }] }],
-          ['setCategory', { roomId: room, category: 'c', deck: [{ img: 'x.png' }] }],
-          ['setCategory', { roomId: room, category: 'c', deck: numberedDeck(201) }],
-          ['setCategory', { roomId: room, category: 'c', deck: 'nope' }],
+          ['setCategory', { roomId: room, categoryId: 'x'.repeat(65) }],
+          ['setCategory', { roomId: room, categoryId: HERBS_CATEGORY_ID, deck: [] }],
           ['startDuel', { roomId: room, aId: a.id }],
         ]
 
@@ -545,7 +558,7 @@ for (const mode of modes) {
         await b.expectNoEvent('categorySet', 100)
         await b.expectNoEvent('duelStarted', 100)
 
-        a.emit('answer', { roomId: room, text: 'pies' })
+        a.emit('answer', { roomId: room, text: firstAnswer })
         await b.waitFor('correct')
       })
     })
