@@ -1,4 +1,5 @@
 import { applyAnswer } from '../../game/duel.js'
+import { toPublicCard } from '../../game/room.js'
 import { assertInRoom } from '../assertInRoom.js'
 import { enqueue } from '../enqueue.js'
 import { parsePayload } from '../parsePayload.js'
@@ -48,7 +49,7 @@ export function registerAnswerHandler({ io, socket, store }: HandlerContext) {
             })
 
             io.to(roomId).emit('currentImage', {
-              current: room.current,
+              current: toPublicCard(room.current),
             })
             return
 
@@ -62,7 +63,7 @@ export function registerAnswerHandler({ io, socket, store }: HandlerContext) {
             })
 
             io.to(roomId).emit('currentImage', {
-              current: room.current,
+              current: toPublicCard(room.current),
             })
             return
         }

@@ -8,9 +8,18 @@ export interface Card {
   aliases: string[]
 }
 
+export interface PublicCard {
+  img: string
+}
+
+export interface PublicCategory {
+  id: string
+  label: string
+}
+
 export interface RoomState {
   players: Map<string, Player>
-  category: string | null
+  categoryId: string | null
   duel: DuelState | null
   max: number
   deck: Card[]
@@ -36,8 +45,7 @@ export interface JoinRoomPayload {
 
 export interface SetCategoryPayload {
   roomId: string
-  category: string
-  deck: Card[]
+  categoryId: string
 }
 
 export interface StartDuelPayload {
@@ -65,17 +73,17 @@ export interface ClientToServerEvents {
 
 export interface RoomStatePayload {
   players: Player[]
-  category: string | null
+  categoryId: string | null
   duel: DuelState | null
-  current: Card | null
+  current: PublicCard | null
 }
 
 export interface CategorySetPayload {
-  category: string
+  categoryId: string
 }
 
 export interface CurrentImagePayload {
-  current: Card | null
+  current: PublicCard | null
 }
 
 export interface DuelStartedPayload {

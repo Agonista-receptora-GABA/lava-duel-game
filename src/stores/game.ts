@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import type {
-  Card,
+  PublicCategory,
   ServerToClientEvents,
   JoinRoomPayload,
   RoomStatePayload,
@@ -23,7 +23,7 @@ export const useGameStore = defineStore('game', {
       roomId: '',
       name: '',
       players: [],
-      category: '',
+      categoryId: null,
       current: null,
       duel: null,
       transcript: '',
@@ -34,9 +34,16 @@ export const useGameStore = defineStore('game', {
       this.name = name
       socket.emit('joinRoom', { roomId, name })
     },
-    setCategory(category: string, deck: Card[]) {
-      this.category = category
-      socket.emit('setCategory', { roomId: this.roomId, category, deck })
+    setCategory(categoryId: string) {
+      this.categoryId = categoryId
+      socket.emit('setCategory', { roomId: this.roomId, categoryId })
+    },
+    async fetchCategories(): Promise<PublicCategory[]> {
+      const response = await fetch('/api/categories')
+
+      if (!response.ok) throw new Error('Nie udało się pobrać kategorii')
+
+      return response.json() as Promise<PublicCategory[]>
     },
     /** Challenges `opponentId`; the server only accepts the sender as the challenger. */
     startDuel(opponentId: string) {
@@ -63,13 +70,13 @@ export const useGameStore = defineStore('game', {
     }: SocketEventsCallback = {}) {
       socket.on('roomState', (s) => {
         this.players = s.players
-        this.category = s.category
+        this.categoryId = s.categoryId
         this.duel = s.duel
         this.current = s.current
         onRoomState(s)
       })
       socket.on('categorySet', (c) => {
-        this.category = c.category
+        this.categoryId = c.categoryId
         onCategorySet(c)
       })
       socket.on('currentImage', (c) => {

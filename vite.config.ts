@@ -18,6 +18,10 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       proxy: {
+        '/api': {
+          target: env.VITE_SOCKET_URL ?? 'http://localhost:3000',
+          changeOrigin: true,
+        },
         '/socket.io': {
           target: env.VITE_SOCKET_URL ?? 'http://localhost:3000',
           ws: true,

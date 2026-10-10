@@ -1,6 +1,8 @@
 import { applyCategory } from '../../game/deck.js'
 import { endDuel, isDuelist } from '../../game/duel.js'
+import { findCategory } from '../../game/catalog.js'
 import { createRoom } from '../../game/room.js'
+import { toPublicCard } from '../../game/room.js'
 import { assertInRoom } from '../assertInRoom.js'
 import { enqueue } from '../enqueue.js'
 import { parsePayload } from '../parsePayload.js'
@@ -13,13 +15,14 @@ export function registerSetCategoryHandler({ io, socket, store }: HandlerContext
 
     if (!payload) return
 
-    const { roomId, category, deck } = payload
+    const { roomId, categoryId } = payload
 
     enqueue(socket, async () => {
       if (!assertInRoom(socket, roomId)) return
 
       return store.withLock(roomId, async () => {
         const room = (await store.get(roomId)) || createRoom()
+        const category = findCategory(categoryId)
 
         // The deck is the duelists' card source: only they may swap it while a duel runs.
         if (room.duel && !isDuelist(room.duel, socket.id)) {
@@ -27,9 +30,12 @@ export function registerSetCategoryHandler({ io, socket, store }: HandlerContext
           return
         }
 
-        // The draw result decides, not room.currentIndex: after an earlier category it still holds
-        // the previous card, so an empty deck would re-broadcast it.
-        if (applyCategory(room, category, deck) === null) {
+        if (!category) {
+          socket.emit('errorMsg', 'Nieznana kategoria')
+          return
+        }
+
+        if (applyCategory(room, categoryId, category.deck) === null) {
           socket.emit('errorMsg', 'Talia jest pusta')
           return
         }
@@ -44,11 +50,11 @@ export function registerSetCategoryHandler({ io, socket, store }: HandlerContext
         }
 
         io.to(roomId).emit('categorySet', {
-          category,
+          categoryId,
         })
 
         io.to(roomId).emit('currentImage', {
-          current: room.current,
+          current: toPublicCard(room.current),
         })
       })
     })

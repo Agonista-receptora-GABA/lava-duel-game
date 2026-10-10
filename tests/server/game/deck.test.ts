@@ -75,7 +75,7 @@ describe('game/deck', () => {
       const idx = applyCategory(room, 'food', deckOf(3), () => 0.99)
 
       expect(idx).toBe(2)
-      expect(room.category).toBe('food')
+      expect(room.categoryId).toBe('food')
       expect(room.deck).toHaveLength(3)
       expect(room.used).toEqual(new Set([2]))
     })
@@ -95,7 +95,7 @@ describe('game/deck', () => {
       const room = createRoom()
 
       expect(applyCategory(room, 'broken', undefined as unknown as Card[])).toBeNull()
-      expect(room.category).toBeNull()
+      expect(room.categoryId).toBeNull()
       expect(room.deck).toEqual([])
       expect(room.current).toBeNull()
     })
