@@ -11,4 +11,11 @@ describe('App', () => {
     const wrapper = mount(App)
     expect(wrapper.text()).toContain('Dołącz')
   })
+
+  it('limits the room and nick inputs to what the server accepts', () => {
+    const wrapper = mount(App)
+
+    expect(wrapper.find('input[placeholder="Room ID"]').attributes('maxlength')).toBe('64')
+    expect(wrapper.find('input[placeholder="Nick"]').attributes('maxlength')).toBe('32')
+  })
 })

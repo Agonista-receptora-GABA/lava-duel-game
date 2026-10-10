@@ -46,8 +46,9 @@ onMounted(() =>
 <template>
   <main>
     <section>
-      <input v-model="roomId" placeholder="Room ID" />
-      <input v-model="name" placeholder="Nick" />
+      <!-- maxlength = limits of the server (LIMITS in server/socket/schemas.ts): longer values are rejected -->
+      <input v-model="roomId" placeholder="Room ID" maxlength="64" />
+      <input v-model="name" placeholder="Nick" maxlength="32" />
       <button @click="game.connect(roomId, name)">Dołącz</button>
     </section>
 
