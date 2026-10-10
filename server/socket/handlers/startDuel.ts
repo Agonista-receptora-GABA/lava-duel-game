@@ -16,6 +16,12 @@ export function registerStartDuelHandler({ io, socket, store }: HandlerContext) 
     enqueue(socket, async () => {
       if (!assertInRoom(socket, roomId)) return
 
+      // `aId` is the challenger - it has to be the sender, or anyone could start duels for others.
+      if (aId !== socket.id) {
+        socket.emit('errorMsg', 'Pojedynek może wystartować tylko wyzywający')
+        return
+      }
+
       return store.withLock(roomId, async () => {
         const room = await store.get(roomId)
 
@@ -26,6 +32,7 @@ export function registerStartDuelHandler({ io, socket, store }: HandlerContext) 
         const duel = startDuel(room, aId, bId)
 
         if (!duel) {
+          socket.emit('errorMsg', 'Nie można rozpocząć pojedynku')
           return
         }
 

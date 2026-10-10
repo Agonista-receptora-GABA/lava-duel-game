@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { Card, RoomState } from '../../../shared/types/events.ts'
 import { applyCategory } from '../../../server/game/deck.ts'
-import { applyAnswer, applyPass, startDuel } from '../../../server/game/duel.ts'
+import { applyAnswer, applyPass, endDuel, isDuelist, startDuel } from '../../../server/game/duel.ts'
 import { addPlayer, createRoom } from '../../../server/game/room.ts'
 
 const deck: Card[] = [
@@ -29,6 +29,30 @@ describe('game/duel', () => {
       expect(room.duel).toEqual({ aId: 'a', bId: 'b', turnId: 'a', score: { a: 0, b: 0 } })
     })
 
+    it('refuses a duel with yourself', () => {
+      const room = createRoom()
+
+      addPlayer(room, 'a')
+
+      expect(startDuel(room, 'a', 'a')).toBeNull()
+      expect(room.duel).toBeNull()
+    })
+
+    it('does not let an outsider replace a running duel', () => {
+      const room = duelRoom() // a vs b, c is a bystander
+
+      expect(startDuel(room, 'c', 'a')).toBeNull()
+      expect(startDuel(room, 'c', 'b')).toBeNull()
+      expect(room.duel).toEqual({ aId: 'a', bId: 'b', turnId: 'a', score: { a: 0, b: 0 } })
+    })
+
+    it('lets a duelist replace the running duel (rematch, or moving on to somebody else)', () => {
+      const room = duelRoom()
+
+      expect(startDuel(room, 'b', 'c')).toMatchObject({ aId: 'b', bId: 'c', turnId: 'b' })
+      expect(startDuel(room, 'c', 'a')).toMatchObject({ aId: 'c', bId: 'a' }) // c is a duelist now
+    })
+
     it('refuses a duel with somebody who is not in the room', () => {
       const room = createRoom()
 
@@ -36,6 +60,24 @@ describe('game/duel', () => {
 
       expect(startDuel(room, 'a', 'ghost')).toBeNull()
       expect(room.duel).toBeNull()
+    })
+  })
+
+  describe('isDuelist / endDuel', () => {
+    it('recognises the two duelists and nobody else', () => {
+      const room = duelRoom()
+
+      expect(isDuelist(room.duel!, 'a')).toBe(true)
+      expect(isDuelist(room.duel!, 'b')).toBe(true)
+      expect(isDuelist(room.duel!, 'c')).toBe(false)
+    })
+
+    it('ends the duel and reports whether there was one', () => {
+      const room = duelRoom()
+
+      expect(endDuel(room)).toBe(true)
+      expect(room.duel).toBeNull()
+      expect(endDuel(room)).toBe(false)
     })
   })
 
