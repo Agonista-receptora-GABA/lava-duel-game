@@ -352,6 +352,37 @@ for (const mode of modes) {
         await a.expectNoEvent('currentImage', 100)
       })
 
+      it('rejects an empty deck without re-sending the previous card or touching the room', async () => {
+        const room = uniqueRoom()
+        const a = await env.connect(0)
+        const b = await env.connect(1)
+
+        await a.join(room, 'Ala')
+        await b.join(room, 'Bob')
+        a.emit('setCategory', { roomId: room, category: 'animals', deck: dogDeck })
+        // currentImage is emitted right after categorySet - wait for it, or it lands after clear()
+        await Promise.all([a.waitFor('currentImage'), b.waitFor('currentImage')])
+        a.clear()
+        b.clear()
+
+        a.emit('setCategory', { roomId: room, category: 'nothing', deck: [] })
+        await a.waitFor('errorMsg')
+
+        // nobody gets a stale card or a category switch...
+        await b.expectNoEvent('categorySet', 100)
+        await b.expectNoEvent('currentImage', 100)
+
+        // ...and a late joiner still sees the previous category and card
+        const late = await env.connect(0)
+
+        await late.join(room, 'Late')
+
+        const state = late.lastOf('roomState')![0]
+
+        expect(state.category).toBe('animals')
+        expect(state.current).toEqual(dogDeck[0])
+      })
+
       it('processes events of one client in the order they were sent', async () => {
         const room = uniqueRoom()
         const b = await env.connect(1)
