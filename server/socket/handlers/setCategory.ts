@@ -1,4 +1,5 @@
 import { applyCategory } from '../../game/deck.js'
+import { endDuel, isDuelist } from '../../game/duel.js'
 import { createRoom } from '../../game/room.js'
 import { assertInRoom } from '../assertInRoom.js'
 import { enqueue } from '../enqueue.js'
@@ -20,6 +21,12 @@ export function registerSetCategoryHandler({ io, socket, store }: HandlerContext
       return store.withLock(roomId, async () => {
         const room = (await store.get(roomId)) || createRoom()
 
+        // The deck is the duelists' card source: only they may swap it while a duel runs.
+        if (room.duel && !isDuelist(room.duel, socket.id)) {
+          socket.emit('errorMsg', 'Trwa pojedynek - kategorię może zmienić tylko jego uczestnik')
+          return
+        }
+
         // The draw result decides, not room.currentIndex: after an earlier category it still holds
         // the previous card, so an empty deck would re-broadcast it.
         if (applyCategory(room, category, deck) === null) {
@@ -27,7 +34,14 @@ export function registerSetCategoryHandler({ io, socket, store }: HandlerContext
           return
         }
 
+        // The duel was played on the old deck - a new category starts from scratch.
+        const duelEnded = endDuel(room)
+
         await store.set(roomId, room)
+
+        if (duelEnded) {
+          io.to(roomId).emit('duelEnded', 'Zmieniono kategorię')
+        }
 
         io.to(roomId).emit('categorySet', {
           category,

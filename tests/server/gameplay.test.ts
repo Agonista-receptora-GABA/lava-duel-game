@@ -166,11 +166,15 @@ for (const mode of modes) {
       })
 
       it('shows every card once before any card repeats', async () => {
-        const { room, a } = await setupDuel(numberedDeck(4))
+        const { room, a, b } = await setupDuel(numberedDeck(4))
 
         // setupDuel cleared history; restart the deck so the first card is recorded
         a.emit('setCategory', { roomId: room, category: 'again', deck: numberedDeck(4) })
         await a.waitForCount('currentImage', 1)
+
+        // a new category ends the duel, and PAS needs a running one
+        a.emit('startDuel', { roomId: room, aId: a.id, bId: b.id })
+        await a.waitFor('duelStarted')
 
         for (let i = 2; i <= 4; i++) {
           a.emit('pass', { roomId: room })
@@ -381,6 +385,82 @@ for (const mode of modes) {
 
         expect(state.category).toBe('animals')
         expect(state.current).toEqual(dogDeck[0])
+      })
+
+      it('lets only the challenger start a duel (nobody can send one on behalf of others)', async () => {
+        const room = uniqueRoom()
+        const a = await env.connect(0)
+        const b = await env.connect(1)
+
+        await a.join(room, 'Ala')
+        await b.join(room, 'Bob')
+        a.clear()
+        b.clear()
+
+        b.emit('startDuel', { roomId: room, aId: a.id, bId: b.id })
+        await b.waitFor('errorMsg')
+
+        await a.expectNoEvent('duelStarted', 100)
+        await b.expectNoEvent('duelStarted', 100)
+      })
+
+      it('does not let a bystander take over a running duel, and lets a duelist rematch', async () => {
+        const { room, a, b } = await setupDuel()
+        const c = await env.connect(0)
+
+        await c.join(room, 'Cy')
+        a.clear()
+        b.clear()
+        c.clear()
+
+        c.emit('startDuel', { roomId: room, aId: c.id, bId: a.id })
+        await c.waitFor('errorMsg')
+        await a.expectNoEvent('duelStarted', 100)
+
+        // the duel between a and b is intact: a still scores
+        a.emit('answer', { roomId: room, text: 'pies' })
+        await b.waitFor('correct')
+
+        // a duelist may start a new one
+        a.emit('startDuel', { roomId: room, aId: a.id, bId: c.id })
+
+        const started = await c.waitFor('duelStarted')
+
+        expect(started[0]).toMatchObject({ aId: a.id, bId: c.id, turnId: a.id })
+      })
+
+      it('does not let a bystander change the category during a duel', async () => {
+        const { room, a, b } = await setupDuel()
+        const c = await env.connect(0)
+
+        await c.join(room, 'Cy')
+        a.clear()
+        b.clear()
+        c.clear()
+
+        c.emit('setCategory', { roomId: room, category: 'hijacked', deck: numberedDeck(2) })
+        await c.waitFor('errorMsg')
+        await a.expectNoEvent('categorySet', 100)
+        await b.expectNoEvent('duelEnded', 100)
+
+        a.emit('answer', { roomId: room, text: 'pies' })
+        await b.waitFor('correct')
+      })
+
+      it('ends the duel when one of its players changes the category', async () => {
+        const { room, a, b } = await setupDuel()
+
+        a.emit('setCategory', { roomId: room, category: 'again', deck: numberedDeck(2) })
+
+        await Promise.all([a.waitFor('duelEnded'), b.waitFor('duelEnded')])
+        await b.waitFor('categorySet')
+        await b.waitFor('currentImage')
+
+        // no duel any more: answers are ignored
+        b.clear()
+        a.emit('answer', { roomId: room, text: 'answer-0' })
+        await b.expectNoEvent('correct', 100)
+        await b.expectNoEvent('wrong', 100)
       })
 
       it('processes events of one client in the order they were sent', async () => {

@@ -62,14 +62,11 @@ onMounted(() =>
         </button>
       </div>
       <div>
-        <label>Wybierz 1v1:</label>
-        <select v-model="aId">
-          <option v-for="p in game.players" :key="p.id" :value="p.id">{{ p.name }}</option>
-        </select>
+        <label>Wyzwij na 1v1:</label>
         <select v-model="bId">
           <option v-for="p in game.players" :key="p.id" :value="p.id">{{ p.name }}</option>
         </select>
-        <button @click="game.startDuel(aId, bId)" :disabled="!aId || !bId">Start 1v1</button>
+        <button @click="game.startDuel(bId)" :disabled="!bId">Start 1v1</button>
       </div>
 
       <div v-if="game.duel && game.current">
@@ -82,7 +79,6 @@ onMounted(() =>
 </template>
 
 <script lang="ts">
-const aId = ref('')
 const bId = ref('')
 const demoDeck = {
   sport: [

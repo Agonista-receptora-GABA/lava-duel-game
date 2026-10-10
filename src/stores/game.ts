@@ -38,8 +38,11 @@ export const useGameStore = defineStore('game', {
       this.category = category
       socket.emit('setCategory', { roomId: this.roomId, category, deck })
     },
-    startDuel(aId: string, bId: string) {
-      socket.emit('startDuel', { roomId: this.roomId, aId, bId })
+    /** Challenges `opponentId`; the server only accepts the sender as the challenger. */
+    startDuel(opponentId: string) {
+      if (!socket.id) return
+
+      socket.emit('startDuel', { roomId: this.roomId, aId: socket.id, bId: opponentId })
     },
     pass() {
       socket.emit('pass', { roomId: this.roomId })
