@@ -18,6 +18,9 @@ the selected category ID over Socket.IO. Card image files stay in `public/img`
 and are served as static frontend assets; game events expose image URLs without
 the server-only answer aliases.
 
+The duel clock rules and implementation are documented in
+[`docs/duel-timer.md`](docs/duel-timer.md).
+
 ## Redis + horizontal scaling
 
 This project uses Redis store for managing game rooms. It's required to make the
