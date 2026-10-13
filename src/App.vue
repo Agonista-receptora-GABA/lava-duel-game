@@ -3,10 +3,12 @@ import { ref, onMounted, computed } from 'vue'
 import type { PublicCategory } from '@shared/types/events'
 import { useGameStore } from './stores/game'
 import { useSpeechRecognition } from './composables/speech'
+import { socket } from './socket'
 
 const game = useGameStore()
 const roomId = ref('pokoj-1')
 const name = ref('Gracz')
+const bId = ref('')
 const categories = ref<PublicCategory[]>([])
 const selectedCategoryId = ref('')
 const { startListening, stopListening, supported } = useSpeechRecognition({
@@ -14,9 +16,9 @@ const { startListening, stopListening, supported } = useSpeechRecognition({
   onResult: (text: string) => game.answer(text),
 })
 
-const currentPlayerId = computed(
-  () => game.players.find(({ name: playerName }) => playerName === name.value)?.id,
-)
+const currentPlayerId = computed(() => game.players.find(({ id }) => id === socket.id)?.id)
+const opponents = computed(() => game.players.filter(({ id }) => id !== currentPlayerId.value))
+const currentCategory = computed(() => categories.value.find(({ id }) => id === game.categoryId))
 
 onMounted(async () => {
   categories.value = await game.fetchCategories()
@@ -51,14 +53,14 @@ onMounted(async () => {
 
 <template>
   <main>
-    <section>
+    <form v-if="!currentPlayerId" @submit.prevent="game.connect(roomId, name)">
       <!-- maxlength = limits of the server (LIMITS in server/socket/schemas.ts): longer values are rejected -->
       <input v-model="roomId" placeholder="Room ID" maxlength="64" />
       <input v-model="name" placeholder="Nick" maxlength="32" />
-      <button @click="game.connect(roomId, name)">Dołącz</button>
-    </section>
+      <button type="submit">Dołącz</button>
+    </form>
 
-    <section v-if="categories.length">
+    <section v-if="currentPlayerId && categories.length && !game.categoryId">
       <select v-model="selectedCategoryId" aria-label="Kategoria">
         <option v-for="category in categories" :key="category.id" :value="category.id">
           {{ category.label }}
@@ -72,14 +74,15 @@ onMounted(async () => {
       </button>
     </section>
 
-    <section v-if="game.players.length">
+    <section v-if="currentPlayerId">
       <p>Graczy: {{ game.players.length }}</p>
+      <p v-if="game.categoryId">Kategoria: {{ currentCategory?.label ?? game.categoryId }}</p>
       <div>
         <label>Wyzwij na 1v1:</label>
         <select v-model="bId">
-          <option v-for="p in game.players" :key="p.id" :value="p.id">{{ p.name }}</option>
+          <option v-for="p in opponents" :key="p.id" :value="p.id">{{ p.name }}</option>
         </select>
-        <button @click="game.startDuel(bId)" :disabled="!bId">Start 1v1</button>
+        <button @click="game.startDuel(bId)" :disabled="!bId || !game.categoryId">Start 1v1</button>
       </div>
 
       <div v-if="game.duel && game.current">
@@ -90,10 +93,6 @@ onMounted(async () => {
     </section>
   </main>
 </template>
-
-<script lang="ts">
-const bId = ref('')
-</script>
 
 <style>
 main {
