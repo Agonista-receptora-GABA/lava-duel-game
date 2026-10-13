@@ -59,11 +59,9 @@ export function createGameServer(config: ServerConfig) {
     await httpClosed
 
     // 3. Only now release the connections.
-    await Promise.allSettled([
-      duelTimeouts.close(),
-      store.close(),
-      ...adapterClients.map((client) => client.quit()),
-    ])
+    await duelTimeouts.close()
+    await store.close()
+    await Promise.allSettled(adapterClients.map((client) => client.quit()))
   }
 
   /** Graceful shutdown; safe to call more than once. */
