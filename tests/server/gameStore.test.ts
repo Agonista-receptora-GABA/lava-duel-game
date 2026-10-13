@@ -17,8 +17,8 @@ afterAll(() => redis?.stop())
 function sampleRoom(overrides: Partial<RoomState> = {}): RoomState {
   return {
     players: new Map([
-      ['p1', { id: 'p1', name: 'Ala' }],
-      ['p2', { id: 'p2', name: 'Bob' }],
+      ['p1', { id: 'p1', name: 'Ala', goldenField: false }],
+      ['p2', { id: 'p2', name: 'Bob', goldenField: false }],
     ]),
     max: 100,
     categoryId: 'animals',
@@ -29,7 +29,17 @@ function sampleRoom(overrides: Partial<RoomState> = {}): RoomState {
     used: new Set([1]),
     currentIndex: 1,
     current: { img: 'cat.png', aliases: ['kot'] },
-    duel: { aId: 'p1', bId: 'p2', turnId: 'p2', score: { p1: 2, p2: 1 } },
+    duel: {
+      duelId: 'fixture-duel',
+      aId: 'p1',
+      bId: 'p2',
+      turnId: 'p2',
+      score: { p1: 2, p2: 1 },
+      remainingMs: { p1: 45_000, p2: 30_000 },
+      turnStartedAt: Date.now(),
+      turnVersion: 1,
+      serverNow: Date.now(),
+    },
     ...overrides,
   }
 }
@@ -89,6 +99,26 @@ for (const impl of implementations) {
 
     it('returns the value of the locked callback', async () => {
       expect(await store.withLock(uniqueRoom(), async () => 42)).toBe(42)
+    })
+
+    it('serializes concurrent in-memory updates for the same room', async () => {
+      if (!(store instanceof MemoryGameStore)) return
+
+      const id = uniqueRoom()
+      await store.set(id, sampleRoom({ max: 0 }))
+      await Promise.all(
+        Array.from({ length: 20 }, () =>
+          store.withLock(id, async () => {
+            const room = (await store.get(id))!
+            const current = room.max
+            await Promise.resolve()
+            room.max = current + 1
+            await store.set(id, room)
+          }),
+        ),
+      )
+
+      expect((await store.get(id))?.max).toBe(20)
     })
 
     it('propagates errors from the locked callback and stays usable afterwards', async () => {

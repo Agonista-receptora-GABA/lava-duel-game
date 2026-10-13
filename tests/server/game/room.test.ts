@@ -14,7 +14,17 @@ function roomWithDuel() {
   addPlayer(room, 'a', 'Ala')
   addPlayer(room, 'b', 'Bob')
   addPlayer(room, 'c', 'Cezary')
-  room.duel = { aId: 'a', bId: 'b', turnId: 'a', score: { a: 0, b: 0 } }
+  room.duel = {
+    duelId: 'test-duel',
+    aId: 'a',
+    bId: 'b',
+    turnId: 'a',
+    score: { a: 0, b: 0 },
+    remainingMs: { a: 45_000, b: 45_000 },
+    turnStartedAt: Date.now(),
+    turnVersion: 0,
+    serverNow: Date.now(),
+  }
 
   return room
 }
@@ -89,14 +99,22 @@ describe('game/room', () => {
 
       room.categoryId = 'animals'
 
-      expect(toRoomStatePayload(room)).toEqual({
+      expect(toRoomStatePayload(room)).toMatchObject({
         players: [
           { id: 'a', name: 'Ala' },
           { id: 'b', name: 'Bob' },
           { id: 'c', name: 'Cezary' },
         ],
         categoryId: 'animals',
-        duel: { aId: 'a', bId: 'b', turnId: 'a', score: { a: 0, b: 0 } },
+        duel: {
+          duelId: 'test-duel',
+          aId: 'a',
+          bId: 'b',
+          turnId: 'a',
+          score: { a: 0, b: 0 },
+          remainingMs: { a: 45_000, b: 45_000 },
+          turnVersion: 0,
+        },
         current: null,
       })
     })

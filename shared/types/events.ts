@@ -1,7 +1,10 @@
 export interface Player {
   id: string
   name: string
+  goldenField: boolean
 }
+
+export type PublicPlayer = Pick<Player, 'id' | 'name'>
 
 export interface Card {
   img: string
@@ -32,10 +35,15 @@ export interface RoomState {
 }
 
 export interface DuelState {
+  duelId: string
   aId: string
   bId: string
   turnId: string
   score: Record<string, number>
+  remainingMs: Record<string, number>
+  turnStartedAt: number
+  turnVersion: number
+  serverNow: number
 }
 
 export interface JoinRoomPayload {
@@ -72,7 +80,7 @@ export interface ClientToServerEvents {
 }
 
 export interface RoomStatePayload {
-  players: Player[]
+  players: PublicPlayer[]
   categoryId: string | null
   duel: DuelState | null
   current: PublicCard | null
@@ -87,16 +95,25 @@ export interface CurrentImagePayload {
 }
 
 export interface DuelStartedPayload {
+  duelId: string
   aId: string
   bId: string
   turnId: string
   score: Record<string, number>
+  remainingMs: Record<string, number>
+  turnStartedAt: number
+  turnVersion: number
+  serverNow: number
 }
 
 export interface CorrectPayload {
   by: string
   score: Record<string, number>
   turnId: string
+  remainingMs: Record<string, number>
+  turnStartedAt: number
+  turnVersion: number
+  serverNow: number
 }
 
 export interface WrongPayload {
@@ -106,10 +123,17 @@ export interface WrongPayload {
 
 export interface PassedPayload {
   by: string
+  turnId: string
+  remainingMs: Record<string, number>
+  turnStartedAt: number
+  turnVersion: number
+  serverNow: number
 }
 
 export interface DuelEndedPayload {
-  reason: string
+  reason: 'timeout' | 'disconnect' | 'categoryChanged'
+  loserId?: string
+  winnerId?: string
 }
 
 export interface NotYourTurnPayload {
@@ -121,7 +145,7 @@ export interface ServerToClientEvents {
   categorySet: (payload: CategorySetPayload) => void
   currentImage: (payload: CurrentImagePayload) => void
   duelStarted: (payload: DuelStartedPayload) => void
-  duelEnded: (reason: string) => void
+  duelEnded: (payload: DuelEndedPayload) => void
   correct: (payload: CorrectPayload) => void
   wrong: (payload: WrongPayload) => void
   passed: (payload: PassedPayload) => void

@@ -60,6 +60,35 @@ export class RedisGameStore implements GameStore {
     return value ? deserializeRoom(value) : null
   }
 
+  async getActiveDuels() {
+    const active: Array<{ roomId: string; room: RoomState }> = []
+    let cursor = '0'
+
+    do {
+      const [nextCursor, keys] = await this.redis.scan(
+        cursor,
+        'MATCH',
+        'lava-duel:room:*',
+        'COUNT',
+        100,
+      )
+      cursor = nextCursor
+
+      if (keys.length === 0) continue
+
+      const values = await this.redis.mget(...keys)
+      keys.forEach((key, index) => {
+        const value = values[index]
+        if (!value) return
+
+        const room = deserializeRoom(value)
+        if (room.duel) active.push({ roomId: key.slice('lava-duel:room:'.length), room })
+      })
+    } while (cursor !== '0')
+
+    return active
+  }
+
   async set(roomId: string, room: RoomState): Promise<void> {
     await this.redis.set(
       this.roomKey(roomId),

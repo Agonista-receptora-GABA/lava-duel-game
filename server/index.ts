@@ -6,7 +6,9 @@ const SHUTDOWN_TIMEOUT_MS = 10_000
 
 const config = loadConfig()
 
-const { httpServer, close } = createGameServer(config)
+const { httpServer, close, ready } = createGameServer(config)
+
+await ready
 
 // Without the host argument Node binds to `::` (every interface), whatever HOST says.
 httpServer.listen(config.port, config.host, () =>

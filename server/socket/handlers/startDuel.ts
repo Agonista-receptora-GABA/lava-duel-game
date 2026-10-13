@@ -5,7 +5,7 @@ import { parsePayload } from '../parsePayload.js'
 import { startDuelSchema } from '../schemas.js'
 import type { HandlerContext } from '../types.ts'
 
-export function registerStartDuelHandler({ io, socket, store }: HandlerContext) {
+export function registerStartDuelHandler({ io, socket, store, duelTimeouts }: HandlerContext) {
   socket.on('startDuel', (raw) => {
     const payload = parsePayload(socket, startDuelSchema, raw)
 
@@ -37,12 +37,19 @@ export function registerStartDuelHandler({ io, socket, store }: HandlerContext) 
         }
 
         await store.set(roomId, room)
+        await duelTimeouts.cancel(roomId)
+        await duelTimeouts.schedule(roomId, duel)
 
         io.to(roomId).emit('duelStarted', {
+          duelId: duel.duelId,
           aId: duel.aId,
           bId: duel.bId,
           turnId: duel.turnId,
           score: duel.score,
+          remainingMs: duel.remainingMs,
+          turnStartedAt: duel.turnStartedAt,
+          turnVersion: duel.turnVersion,
+          serverNow: Date.now(),
         })
       })
     })

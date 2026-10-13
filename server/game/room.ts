@@ -20,8 +20,8 @@ export function isRoomFull(room: RoomState) {
   return room.players.size >= room.max
 }
 
-export function addPlayer(room: RoomState, id: string, name?: string) {
-  room.players.set(id, { id, name: name?.trim() || DEFAULT_PLAYER_NAME })
+export function addPlayer(room: RoomState, id: string, name?: string, goldenField = false) {
+  room.players.set(id, { id, name: name?.trim() || DEFAULT_PLAYER_NAME, goldenField })
 }
 
 /**
@@ -56,14 +56,7 @@ export function toRoomStatePayload(room: RoomState): RoomStatePayload {
       name: player.name,
     })),
     categoryId: room.categoryId,
-    duel: room.duel
-      ? {
-          aId: room.duel.aId,
-          bId: room.duel.bId,
-          turnId: room.duel.turnId,
-          score: room.duel.score,
-        }
-      : null,
+    duel: room.duel ? { ...room.duel, serverNow: Date.now() } : null,
     current: toPublicCard(room.current),
   }
 }

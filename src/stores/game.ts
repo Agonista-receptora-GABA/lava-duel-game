@@ -95,6 +95,10 @@ export const useGameStore = defineStore('game', {
         if (this.duel) {
           this.duel.score = p.score
           this.duel.turnId = p.turnId
+          this.duel.remainingMs = p.remainingMs
+          this.duel.turnStartedAt = p.turnStartedAt
+          this.duel.turnVersion = p.turnVersion
+          this.duel.serverNow = p.serverNow
           onCorrect(p)
         }
       })
@@ -102,6 +106,12 @@ export const useGameStore = defineStore('game', {
         onWrong(w)
       })
       socket.on('passed', (p) => {
+        if (this.duel) {
+          this.duel.remainingMs = p.remainingMs
+          this.duel.turnStartedAt = p.turnStartedAt
+          this.duel.turnVersion = p.turnVersion
+          this.duel.serverNow = p.serverNow
+        }
         onPassed(p)
       })
     },

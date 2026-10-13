@@ -8,6 +8,7 @@ import type { ServerConfig } from './config.js'
 import type { GameStore } from './gameStore.ts'
 import { MemoryGameStore } from './memoryGameStore.js'
 import { RedisGameStore } from './redisGameStore.js'
+import { DuelTimeoutScheduler } from './game/duelTimeoutScheduler.js'
 import { whenHandlersIdle } from './socket/enqueue.js'
 import { MAX_PAYLOAD_BYTES } from './socket/schemas.js'
 import { registerSocketHandlers } from './socket/registerHandlers.js'
@@ -41,7 +42,9 @@ export function createGameServer(config: ServerConfig) {
     console.log('[redis] disabled; using in-memory game store')
   }
 
-  registerSocketHandlers(io, store)
+  const duelTimeouts = new DuelTimeoutScheduler(store, io, redisUrl)
+  const ready = duelTimeouts.restore()
+  registerSocketHandlers(io, store, duelTimeouts)
 
   let closing: Promise<void> | undefined
 
@@ -56,11 +59,15 @@ export function createGameServer(config: ServerConfig) {
     await httpClosed
 
     // 3. Only now release the connections.
-    await Promise.allSettled([store.close(), ...adapterClients.map((client) => client.quit())])
+    await Promise.allSettled([
+      duelTimeouts.close(),
+      store.close(),
+      ...adapterClients.map((client) => client.quit()),
+    ])
   }
 
   /** Graceful shutdown; safe to call more than once. */
   const close = () => (closing ??= shutdown())
 
-  return { httpServer, io, store, close }
+  return { httpServer, io, store, close, ready }
 }

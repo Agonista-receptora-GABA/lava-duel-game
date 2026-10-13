@@ -3,7 +3,7 @@ import { emitRoomState } from '../emitRoomState.js'
 import { enqueue } from '../enqueue.js'
 import type { HandlerContext } from '../types.ts'
 
-export function registerDisconnectingHandler({ io, socket, store }: HandlerContext) {
+export function registerDisconnectingHandler({ io, socket, store, duelTimeouts }: HandlerContext) {
   socket.on('disconnecting', () => {
     // socket.rooms must be copied synchronously - Socket.IO clears that set right after the event
     // and we await inside the loop. Skip the "private" room named after socket.id.
@@ -21,7 +21,8 @@ export function registerDisconnectingHandler({ io, socket, store }: HandlerConte
           const duelEnded = removePlayer(room, socket.id)
 
           if (duelEnded) {
-            io.to(roomId).emit('duelEnded', 'Gracz rozłączył się')
+            await duelTimeouts.cancel(roomId)
+            io.to(roomId).emit('duelEnded', { reason: 'disconnect' })
           }
 
           // An empty room is kept (category/deck survive a page refresh) but expires:

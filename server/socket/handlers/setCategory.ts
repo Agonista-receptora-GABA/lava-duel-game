@@ -9,7 +9,7 @@ import { parsePayload } from '../parsePayload.js'
 import { setCategorySchema } from '../schemas.js'
 import type { HandlerContext } from '../types.ts'
 
-export function registerSetCategoryHandler({ io, socket, store }: HandlerContext) {
+export function registerSetCategoryHandler({ io, socket, store, duelTimeouts }: HandlerContext) {
   socket.on('setCategory', (raw) => {
     const payload = parsePayload(socket, setCategorySchema, raw)
 
@@ -42,11 +42,12 @@ export function registerSetCategoryHandler({ io, socket, store }: HandlerContext
 
         // The duel was played on the old deck - a new category starts from scratch.
         const duelEnded = endDuel(room)
+        if (duelEnded) await duelTimeouts.cancel(roomId)
 
         await store.set(roomId, room)
 
         if (duelEnded) {
-          io.to(roomId).emit('duelEnded', 'Zmieniono kategorię')
+          io.to(roomId).emit('duelEnded', { reason: 'categoryChanged' })
         }
 
         io.to(roomId).emit('categorySet', {

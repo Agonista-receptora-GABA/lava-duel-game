@@ -6,7 +6,7 @@ import { parsePayload } from '../parsePayload.js'
 import { answerSchema } from '../schemas.js'
 import type { HandlerContext } from '../types.ts'
 
-export function registerAnswerHandler({ io, socket, store }: HandlerContext) {
+export function registerAnswerHandler({ io, socket, store, duelTimeouts }: HandlerContext) {
   socket.on('answer', (raw) => {
     const payload = parsePayload(socket, answerSchema, raw)
 
@@ -43,9 +43,15 @@ export function registerAnswerHandler({ io, socket, store }: HandlerContext) {
 
           case 'pass':
             await store.set(roomId, room)
+            if (room.duel) await duelTimeouts.schedule(roomId, room.duel)
 
             io.to(roomId).emit('passed', {
               by: socket.id,
+              turnId: room.duel!.turnId,
+              remainingMs: room.duel!.remainingMs,
+              turnStartedAt: room.duel!.turnStartedAt,
+              turnVersion: room.duel!.turnVersion,
+              serverNow: Date.now(),
             })
 
             io.to(roomId).emit('currentImage', {
@@ -55,15 +61,30 @@ export function registerAnswerHandler({ io, socket, store }: HandlerContext) {
 
           case 'correct':
             await store.set(roomId, room)
+            if (room.duel) await duelTimeouts.schedule(roomId, room.duel)
 
             io.to(roomId).emit('correct', {
               by: socket.id,
               score: outcome.score,
               turnId: outcome.turnId,
+              remainingMs: room.duel!.remainingMs,
+              turnStartedAt: room.duel!.turnStartedAt,
+              turnVersion: room.duel!.turnVersion,
+              serverNow: Date.now(),
             })
 
             io.to(roomId).emit('currentImage', {
               current: toPublicCard(room.current),
+            })
+            return
+
+          case 'timeout':
+            await store.set(roomId, room)
+            await duelTimeouts.cancel(roomId)
+            io.to(roomId).emit('duelEnded', {
+              reason: 'timeout',
+              loserId: outcome.loserId,
+              winnerId: outcome.winnerId,
             })
             return
         }
