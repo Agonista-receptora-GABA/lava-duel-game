@@ -7,9 +7,16 @@ const EMPTY_ROOM_TTL_MS = 10 * 60 * 1000
 export class MemoryGameStore implements GameStore {
   private readonly rooms = new Map<string, RoomState>()
   private readonly emptyRoomTimers = new Map<string, NodeJS.Timeout>()
+  private readonly roomLocks = new Map<string, Promise<void>>()
 
   async get(roomId: string): Promise<RoomState | null> {
     return this.rooms.get(roomId) ?? null
+  }
+
+  async getActiveDuels() {
+    return Array.from(this.rooms, ([roomId, room]) => ({ roomId, room })).filter(
+      ({ room }) => room.duel !== null,
+    )
   }
 
   async set(roomId: string, room: RoomState): Promise<void> {
@@ -32,8 +39,22 @@ export class MemoryGameStore implements GameStore {
     this.rooms.delete(roomId)
   }
 
-  async withLock<T>(_roomId: string, callback: () => Promise<T>): Promise<T> {
-    return callback()
+  async withLock<T>(roomId: string, callback: () => Promise<T>): Promise<T> {
+    const previous = this.roomLocks.get(roomId) ?? Promise.resolve()
+    let release!: () => void
+    const current = new Promise<void>((resolve) => {
+      release = resolve
+    })
+
+    this.roomLocks.set(roomId, current)
+    await previous
+
+    try {
+      return await callback()
+    } finally {
+      release()
+      if (this.roomLocks.get(roomId) === current) this.roomLocks.delete(roomId)
+    }
   }
 
   async close(): Promise<void> {

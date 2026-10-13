@@ -1,7 +1,14 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { Card, RoomState } from '../../../shared/types/events.ts'
 import { applyCategory } from '../../../server/game/deck.ts'
-import { applyAnswer, applyPass, endDuel, isDuelist, startDuel } from '../../../server/game/duel.ts'
+import {
+  applyAnswer,
+  applyPass,
+  endDuel,
+  expireDuelTurn,
+  isDuelist,
+  startDuel,
+} from '../../../server/game/duel.ts'
 import { addPlayer, createRoom } from '../../../server/game/room.ts'
 
 const deck: Card[] = [
@@ -26,7 +33,13 @@ describe('game/duel', () => {
     it('lets the challenger move first, with zero scores', () => {
       const room = duelRoom()
 
-      expect(room.duel).toEqual({ aId: 'a', bId: 'b', turnId: 'a', score: { a: 0, b: 0 } })
+      expect(room.duel).toMatchObject({
+        aId: 'a',
+        bId: 'b',
+        turnId: 'a',
+        score: { a: 0, b: 0 },
+        remainingMs: { a: 45_000, b: 45_000 },
+      })
     })
 
     it('refuses a duel with yourself', () => {
@@ -43,7 +56,7 @@ describe('game/duel', () => {
 
       expect(startDuel(room, 'c', 'a')).toBeNull()
       expect(startDuel(room, 'c', 'b')).toBeNull()
-      expect(room.duel).toEqual({ aId: 'a', bId: 'b', turnId: 'a', score: { a: 0, b: 0 } })
+      expect(room.duel).toMatchObject({ aId: 'a', bId: 'b', turnId: 'a', score: { a: 0, b: 0 } })
     })
 
     it('lets a duelist replace the running duel (rematch, or moving on to somebody else)', () => {
@@ -60,6 +73,16 @@ describe('game/duel', () => {
 
       expect(startDuel(room, 'a', 'ghost')).toBeNull()
       expect(room.duel).toBeNull()
+    })
+
+    it('gives 50 seconds only to a player with the golden field', () => {
+      const room = createRoom()
+      addPlayer(room, 'a', 'Ala', true)
+      addPlayer(room, 'b', 'Bob')
+
+      startDuel(room, 'a', 'b')
+
+      expect(room.duel?.remainingMs).toEqual({ a: 50_000, b: 45_000 })
     })
   })
 
@@ -94,15 +117,20 @@ describe('game/duel', () => {
 
       room = duelRoom()
       room.currentIndex = null
-      expect(applyAnswer(room, 'a', 'pies')).toEqual({ type: 'ignored' })
+      expect(applyAnswer(room, 'a', 'pies', Math.random, room.duel!.turnStartedAt + 1)).toEqual({
+        type: 'ignored',
+      })
     })
 
     it('scores a correct answer ignoring case and whitespace, passes the turn, draws a new card', () => {
       // random = 0.99 -> the cat card is the only one left in this round
-      const outcome = applyAnswer(room, 'a', '  DOG ', () => 0.99)
+      const startedAt = room.duel!.turnStartedAt
+      const outcome = applyAnswer(room, 'a', '  DOG ', () => 0.99, startedAt + 5_000)
 
-      expect(outcome).toEqual({ type: 'correct', score: { a: 1, b: 0 }, turnId: 'b' })
+      expect(outcome).toMatchObject({ type: 'correct', score: { a: 1, b: 0 }, turnId: 'b' })
       expect(room.duel!.turnId).toBe('b')
+      expect(room.duel!.remainingMs).toEqual({ a: 40_000, b: 45_000 })
+      expect(room.duel!.turnStartedAt).toBe(startedAt + 5_000)
       expect(room.current).toEqual(deck[1])
     })
 
@@ -130,11 +158,13 @@ describe('game/duel', () => {
     })
 
     it('draws a new card on PAS without changing the turn or the score', () => {
-      const outcome = applyAnswer(room, 'a', ' Pas ', () => 0.99)
+      const startedAt = room.duel!.turnStartedAt
+      const outcome = applyAnswer(room, 'a', ' Pas ', () => 0.99, startedAt + 5_000)
 
-      expect(outcome).toEqual({ type: 'pass' })
+      expect(outcome).toMatchObject({ type: 'pass' })
       expect(room.current).toEqual(deck[1])
       expect(room.duel!.turnId).toBe('a')
+      expect(room.duel!.remainingMs.a).toBe(37_000)
       expect(room.duel!.score).toEqual({ a: 0, b: 0 })
     })
 
@@ -168,6 +198,46 @@ describe('game/duel', () => {
 
       room.duel = null
       expect(applyPass(room, 'a')).toEqual({ type: 'ignored' })
+    })
+  })
+
+  describe('turn timeout', () => {
+    it('expires the active player at zero and ignores stale turns', () => {
+      const room = duelRoom()
+      const duel = room.duel!
+
+      expect(
+        expireDuelTurn(room, duel.duelId, duel.turnVersion, duel.turnStartedAt + 44_999),
+      ).toEqual({
+        type: 'notExpired',
+        remainingMs: 1,
+      })
+      expect(
+        expireDuelTurn(room, duel.duelId, duel.turnVersion, duel.turnStartedAt + 45_000),
+      ).toEqual({
+        type: 'timeout',
+        loserId: 'a',
+        winnerId: 'b',
+      })
+      expect(room.duel).toBeNull()
+    })
+
+    it("keeps the inactive player's full time and expires them on their later turn", () => {
+      const room = duelRoom()
+      const duel = room.duel!
+      const duelId = duel.duelId
+      const firstTurnVersion = duel.turnVersion
+
+      const nextTurnAt = duel.turnStartedAt + 10_000
+      applyAnswer(room, 'a', 'pies', () => 0.99, nextTurnAt)
+
+      expect(expireDuelTurn(room, duelId, firstTurnVersion + 1, nextTurnAt + 45_000)).toMatchObject(
+        {
+          type: 'timeout',
+          loserId: 'b',
+          winnerId: 'a',
+        },
+      )
     })
   })
 })

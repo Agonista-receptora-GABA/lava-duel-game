@@ -1,6 +1,8 @@
 import { afterAll, describe, expect, it } from 'vitest'
+import { Queue } from 'bullmq'
 import { startRedis } from './helpers/redis.ts'
 import { uniqueRoom, useServers } from './helpers/servers.ts'
+import { RedisGameStore } from '../../server/redisGameStore.ts'
 
 // Black-box behaviour of the game, driven only through Socket.IO events.
 // The same scenarios run against a single in-memory instance and against two instances
@@ -26,6 +28,7 @@ for (const mode of modes) {
 
   suite(`gameplay: ${mode.name}`, () => {
     const env = useServers({ pods: mode.pods, redisUrl: mode.useRedis ? redis?.url : undefined })
+    const timeoutIt = mode.useRedis ? it : it.skip
 
     /** Two players in a room, category set, duel started (a moves first). Event history cleared. */
     async function setupDuel(categoryId = HERBS_CATEGORY_ID) {
@@ -234,13 +237,58 @@ for (const mode of modes) {
         for (const client of [a, b]) {
           const [duel] = await client.waitFor('duelStarted')
 
-          expect(duel).toEqual({
+          expect(duel).toMatchObject({
             aId: a.id,
             bId: b.id,
             turnId: a.id,
             score: { [a.id]: 0, [b.id]: 0 },
+            remainingMs: { [a.id]: 45_000, [b.id]: 45_000 },
+            turnVersion: 0,
+            serverNow: expect.any(Number),
           })
         }
+      })
+
+      timeoutIt('ends on the active player timeout and broadcasts the winner', async () => {
+        const { room, a, b } = await setupDuel()
+        const store = new RedisGameStore(redis!.url)
+        const timeoutQueue = new Queue('lava-duel-timeouts', {
+          connection: {
+            host: new URL(redis!.url).hostname,
+            port: Number(new URL(redis!.url).port),
+          },
+        })
+
+        await store.withLock(room, async () => {
+          const state = await store.get(room)
+          if (!state?.duel) throw new Error('duel missing from store')
+
+          state.duel.remainingMs[a.id] = 250
+          state.duel.turnStartedAt = Date.now()
+          await store.set(room, state)
+
+          await timeoutQueue.add(
+            'expire-duel-turn',
+            {
+              roomId: room,
+              duelId: state.duel.duelId,
+              turnVersion: state.duel.turnVersion,
+              retry: 0,
+            },
+            { delay: 250, jobId: `gameplay-timeout-${room}` },
+          )
+        })
+
+        for (const client of [a, b]) {
+          const [result] = await client.waitFor('duelEnded', () => true, 3_000)
+          expect(result).toEqual({ reason: 'timeout', loserId: a.id, winnerId: b.id })
+        }
+
+        const late = await env.connect(0)
+        await late.join(room, 'Late')
+        expect(late.lastOf('roomState')![0].duel).toBeNull()
+
+        await Promise.all([store.close(), timeoutQueue.close()])
       })
 
       it('ignores a duel with a player who is not in the room', async () => {
@@ -262,10 +310,11 @@ for (const mode of modes) {
         for (const client of [a, b]) {
           const [correct] = await client.waitFor('correct')
 
-          expect(correct).toEqual({
+          expect(correct).toMatchObject({
             by: a.id,
             score: { [a.id]: 1, [b.id]: 0 },
             turnId: b.id,
+            remainingMs: expect.objectContaining({ [a.id]: expect.any(Number), [b.id]: 45_000 }),
           })
           await client.waitFor('currentImage')
         }
@@ -309,7 +358,7 @@ for (const mode of modes) {
         for (const client of [a, b]) {
           const [passed] = await client.waitFor('passed')
 
-          expect(passed).toEqual({ by: a.id })
+          expect(passed).toMatchObject({ by: a.id, turnId: a.id, remainingMs: expect.any(Object) })
           await client.waitFor('currentImage')
         }
 
@@ -571,7 +620,7 @@ for (const mode of modes) {
 
         const [reason] = await a.waitFor('duelEnded')
 
-        expect(typeof reason).toBe('string')
+        expect(reason).toEqual({ reason: 'disconnect' })
 
         const [state] = await a.waitFor('roomState', (s) => s.players.length === 1)
 

@@ -1,6 +1,7 @@
 import type { Server, Socket } from 'socket.io'
 import type { ClientToServerEvents, ServerToClientEvents } from '@shared/types/events.ts'
 import type { GameStore } from '../gameStore.ts'
+import type { DuelTimeoutScheduler } from '../game/duelTimeoutScheduler.js'
 
 export type AppServer = Server<ClientToServerEvents, ServerToClientEvents>
 export type AppSocket = Socket<ClientToServerEvents, ServerToClientEvents>
@@ -10,4 +11,5 @@ export interface HandlerContext {
   io: AppServer
   socket: AppSocket
   store: GameStore
+  duelTimeouts: DuelTimeoutScheduler
 }
