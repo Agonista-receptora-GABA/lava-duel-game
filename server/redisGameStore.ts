@@ -26,11 +26,27 @@ function serializeRoom(room: RoomState) {
 
 function deserializeRoom(value: string): RoomState {
   const parsed = JSON.parse(value)
+  const players = new Map(
+    parsed.players.map(
+      ([id, player]: [string, { id: string; name: string; goldenField?: boolean }]) => [
+        id,
+        { ...player, goldenField: player.goldenField ?? false },
+      ],
+    ),
+  )
+  const duel = parsed.duel
+  const hasTimerState =
+    duel &&
+    typeof duel.duelId === 'string' &&
+    Number.isFinite(duel.remainingMs?.[duel.turnId]) &&
+    Number.isFinite(duel.turnStartedAt) &&
+    Number.isInteger(duel.turnVersion)
 
   return {
     ...parsed,
-    players: new Map(parsed.players),
+    players,
     used: new Set(parsed.used),
+    duel: duel && hasTimerState ? duel : null,
   }
 }
 

@@ -208,6 +208,28 @@ redisSuite('RedisGameStore specifics', () => {
 
     expect(await raw.ttl(roomKey(id))).toBeGreaterThan(60 * 60)
   })
+
+  it('normalizes legacy rooms without timer fields before returning them', async () => {
+    const id = uniqueRoom()
+    const store = newStore()
+    const rawRoom = {
+      players: [['p1', { id: 'p1', name: 'Ala' }]],
+      max: 100,
+      categoryId: 'animals',
+      deck: [],
+      used: [],
+      currentIndex: null,
+      current: null,
+      duel: { aId: 'p1', bId: 'p2', turnId: 'p1', score: { p1: 0, p2: 0 } },
+    }
+
+    await raw.set(roomKey(id), JSON.stringify(rawRoom))
+
+    const room = await store.get(id)
+
+    expect(room?.players.get('p1')).toEqual({ id: 'p1', name: 'Ala', goldenField: false })
+    expect(room?.duel).toBeNull()
+  })
 })
 
 describe('MemoryGameStore specifics', () => {
